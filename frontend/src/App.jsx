@@ -4,7 +4,10 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard/Dashboard';
+
+// Dashboard layout and page components
+import DashboardLayout, { DashboardHome, Friends, Reports, SettingsPage } from './pages/Dashboard/Dashboard';
+import MapComponent from './pages/Dashboard/Map';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -21,8 +24,6 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
-
-
 const App = () => {
   return (
     <Router>
@@ -31,14 +32,59 @@ const App = () => {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+
+          {/* Dashboard routes handled here so Dashboard is purely a layout */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <DashboardLayout>
+                  <DashboardHome />
+                </DashboardLayout>
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dashboard/map"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <MapComponent />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/friends"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Friends />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/reports"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Reports />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/settings"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SettingsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>
@@ -46,4 +92,4 @@ const App = () => {
   );
 };
 
-export default App
+export default App;

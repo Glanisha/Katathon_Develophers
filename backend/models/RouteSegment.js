@@ -1,3 +1,6 @@
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
 const RouteSegmentSchema = new Schema({
   // geometry as LineString for segment
   geom: {

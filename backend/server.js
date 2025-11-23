@@ -4,7 +4,8 @@ const bodyParser = require('body-parser');
 const databaseConfig = require('./config/database');
 require('dotenv').config();  
 const cors = require('cors'); 
-const authRoutes = require('./routes/AuthRoutes')
+const authRoutes = require('./routes/AuthRoutes');
+const mapRoutes = require('./routes/MapRoutes');
 
 
 
@@ -20,6 +21,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 databaseConfig();
 
 app.use('/api/auth', authRoutes);
+app.use('/api/map', mapRoutes);
 
 
 // Start the server

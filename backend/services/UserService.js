@@ -1,4 +1,4 @@
-const User = require('../models/user');
+const User = require('../models/User');
 
 class UserService {
   // Find friends near a location

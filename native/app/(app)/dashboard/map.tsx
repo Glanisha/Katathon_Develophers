@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions, Modal } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Picker } from '@react-native-picker/picker';
 import api from '../../../src/api/api';
+import { WebView } from 'react-native-webview';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,6 +32,10 @@ interface Route {
 const MapScreen = () => {
   const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
   const [destination, setDestination] = useState<Coordinates | null>(null);
+  // New: allow manual source or device location as source
+  const [useDeviceAsSource, setUseDeviceAsSource] = useState<boolean>(true); // default = device
+  const [manualSource, setManualSource] = useState<Coordinates | null>(null);
+  const [settingSourceMode, setSettingSourceMode] = useState<boolean>(false); // if true next map tap sets source
   const [purpose, setPurpose] = useState('');
   const [routeType, setRouteType] = useState<'safest' | 'fastest' | 'balanced'>('safest');
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -40,11 +45,21 @@ const MapScreen = () => {
   const [distanceRemaining, setDistanceRemaining] = useState<number>(0);
   const [explorePOIs, setExplorePOIs] = useState<any[]>([]);
   const [showRouteForm, setShowRouteForm] = useState(true);
-  const [destinationInput, setDestinationInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showExperienceModal, setShowExperienceModal] = useState(false);
+  const [experienceIndex, setExperienceIndex] = useState(0);
 
   const mapRef = useRef<MapView>(null);
   const watchIdRef = useRef<Location.LocationSubscription | null>(null);
+  const mapillaryEmbeds = [
+    'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=523808853473226&x=0.5&y=0.5&style=photo',
+    'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1240144430506052&x=0.5&y=0.5&style=photo',
+    'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=528738053191765&x=0.49999999999337164&y=0.49999999999979505&style=photo',
+    'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1095380695299787&x=0.5&y=0.5&style=photo',
+    'https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2215276745539638&x=0.5000000000000001&y=0.5&style=photo',
+    'https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2551481258378160&x=0.4999999999999994&y=0.5&style=photo',
+    'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=4029046383993584&x=0.5000000000000063&y=0.5&style=photo'
+  ];
 
   useEffect(() => {
     getCurrentLocation();
@@ -117,18 +132,38 @@ const MapScreen = () => {
     }
   };
 
+  // helper to get effective origin (device or manual)
+  const getOrigin = (): Coordinates | null => {
+    return useDeviceAsSource ? currentLocation : manualSource;
+  };
+  
+
   const calculateRoutes = async () => {
-    if (!currentLocation) {
-      Alert.alert('Error', 'Current location not available');
+    if (!destination) {
+      Alert.alert('Error', 'Tap the map to set a destination');
+      return;
+    }
+
+    const originCoords = getOrigin();
+    if (useDeviceAsSource && !currentLocation) {
+      Alert.alert('Error', 'Current device location not available. Allow location access or switch to manual source.');
+      return;
+    }
+    if (!originCoords) {
+      Alert.alert('Error', 'Source not available. Set source manually or enable device location.');
       return;
     }
 
     setLoading(true);
     try {
-      const requestData: any = {
+      const requestData = {
         origin: {
-          lat: currentLocation.latitude,
-          lng: currentLocation.longitude
+          lat: originCoords.latitude,
+          lng: originCoords.longitude
+        },
+        destination: {
+          lat: destination.latitude,
+          lng: destination.longitude
         },
         preferences: {
           routeType,
@@ -136,18 +171,11 @@ const MapScreen = () => {
         }
       };
 
-      // Add destination if provided
-      if (destination) {
-        requestData.destination = {
-          lat: destination.latitude,
-          lng: destination.longitude
-        };
-      }
+      console.log('Sending route request:', requestData);
 
       const response = await api.post('/map/calculate-route', requestData);
       
       if (response.data.explorePOIs) {
-        // Exploration mode - no destination provided
         setExplorePOIs(response.data.explorePOIs);
         setRoutes([]);
         setShowRouteForm(false);
@@ -159,25 +187,36 @@ const MapScreen = () => {
       }
     } catch (error: any) {
       console.error('Route calculation error:', error);
-      Alert.alert('Error', error.response?.data?.error || 'Failed to calculate routes');
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Failed to calculate routes');
     } finally {
       setLoading(false);
     }
   };
 
   const selectRoute = async (route: Route) => {
+    // Set immediately so UI updates
     setSelectedRoute(route);
-    
+
     try {
-      // Save route to backend
+      // Try saving route on backend
       const response = await api.post('/map/save-route', {
         routeData: route,
         preferences: { purpose, routeType }
       });
-      
-      setSavedRouteId(response.data.savedRoute._id);
-      setDistanceRemaining(route.lengthInMeters);
-      
+
+      const savedId = response?.data?.savedRoute?._id;
+      if (savedId) {
+        setSavedRouteId(savedId);
+        console.log('Route saved, id:', savedId);
+      } else {
+        // Fallback: generate a local id if backend didn't return one
+        const fallbackId = `local_${Date.now()}`;
+        setSavedRouteId(fallbackId);
+        console.warn('Save-route returned no id, using fallback:', fallbackId);
+      }
+
+      setDistanceRemaining(route.lengthInMeters || 0);
+
       // Fit map to route
       if (mapRef.current && route.legs.length > 0) {
         const coordinates = route.legs.flatMap(leg => leg.points);
@@ -186,21 +225,50 @@ const MapScreen = () => {
         });
       }
     } catch (error: any) {
-      console.error('Save route error:', error);
-      Alert.alert('Error', 'Failed to save route');
+      console.error('Save route error:', error?.message || error);
+      // Still allow route selection even if backend fails
+      const fallbackId = `local_${Date.now()}`;
+      setSavedRouteId(fallbackId);
+      setDistanceRemaining(route.lengthInMeters || 0);
+      
+      if (mapRef.current && route.legs.length > 0) {
+        const coordinates = route.legs.flatMap(leg => leg.points);
+        mapRef.current.fitToCoordinates(coordinates, {
+          edgePadding: { top: 50, right: 50, bottom: 250, left: 50 },
+        });
+      }
     }
   };
 
   const startTracking = async () => {
-    if (!savedRouteId || !selectedRoute) {
+    if (!selectedRoute) {
       Alert.alert('Error', 'No route selected');
       return;
     }
 
+    // Only allow tracking if using device as source
+    if (!useDeviceAsSource) {
+      Alert.alert('Info', 'Tracking only available when using device location as source. View SV Road experience instead.');
+      return;
+    }
+
+    if (!currentLocation) {
+      Alert.alert('Error', 'Current device location not available');
+      return;
+    }
+
     try {
-      await api.post('/map/start-tracking', { routeId: savedRouteId });
+      // Attempt backend tracking if we have a saved route id
+      if (savedRouteId && !savedRouteId.startsWith('local_')) {
+        try {
+          await api.post('/map/start-tracking', { routeId: savedRouteId });
+        } catch (err) {
+          console.warn('Backend start-tracking failed, proceeding with local tracking:');
+        }
+      }
+
       setIsTracking(true);
-      
+
       // Start location tracking
       const subscription = await Location.watchPositionAsync(
         {
@@ -234,22 +302,24 @@ const MapScreen = () => {
       const distance = calculateDistance(location, endPoint);
       setDistanceRemaining(Math.max(0, distance));
 
-      await api.post('/map/update-progress', {
-        routeId: savedRouteId,
-        currentLocation: {
-          lat: location.latitude,
-          lng: location.longitude
-        },
-        distanceRemaining: distance
-      });
+      // Only update backend if we have a non-local route id
+      if (!savedRouteId.startsWith('local_')) {
+        await api.post('/map/update-progress', {
+          routeId: savedRouteId,
+          currentLocation: {
+            lat: location.latitude,
+            lng: location.longitude
+          },
+          distanceRemaining: distance
+        });
+      }
 
-      // Check if destination reached
+      // Check if destination reached (< 50m away)
       if (distance < 50) {
         setIsTracking(false);
         if (watchIdRef.current) {
-          Location.watchPositionAsync({ accuracy: Location.Accuracy.High }, () => {}).then(watcher => {
-            watcher.remove();
-          });
+          watchIdRef.current.remove();
+          watchIdRef.current = null;
         }
         Alert.alert('Congratulations!', 'You have reached your destination!');
       }
@@ -277,7 +347,6 @@ const MapScreen = () => {
     setSelectedRoute(null);
     setExplorePOIs([]);
     setDestination(null);
-    setDestinationInput('');
     setPurpose('');
     setIsTracking(false);
     setSavedRouteId(null);
@@ -291,10 +360,69 @@ const MapScreen = () => {
   const routeCoordinates = selectedRoute ? 
     selectedRoute.legs.flatMap(leg => leg.points) : [];
 
+  // Determine whether a route is the SV Road (Bandra→Kandivali) route.
+  // Simple heuristic: majority of route points fall within an SV Road bounding box.
+  const isSVRoadRoute = (route: Route | null): boolean => {
+    if (!route || !route.legs || route.legs.length === 0) return false;
+    const points = route.legs.flatMap(l => l.points);
+    if (points.length === 0) return false;
+
+    // Loose bounding box for SV Road corridor in Mumbai
+    const minLat = 19.03;
+    const maxLat = 19.22;
+    const minLng = 72.80;
+    const maxLng = 72.90;
+
+    let insideCount = 0;
+    for (const p of points) {
+      // safely read both possible key names and avoid TS errors
+      const lat = (p as any).latitude ?? (p as any).lat ?? null;
+      const lng = (p as any).longitude ?? (p as any).lng ?? null;
+      if (lat == null || lng == null) continue;
+      if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) insideCount++;
+    }
+
+    return insideCount / points.length >= 0.6; // 60% of points inside -> consider SV Road
+  };
+
+  // open modal (choose first embed)
+  const openExperience = () => {
+    setExperienceIndex(0);
+    setShowExperienceModal(true);
+  };
+
+  // helpers to navigate embeds
+  const prevExperience = () => setExperienceIndex(i => Math.max(0, i - 1));
+  const nextExperience = () => setExperienceIndex(i => Math.min(mapillaryEmbeds.length - 1, i + 1));
+
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
+        onPress={(e) => {
+          const coord = e.nativeEvent.coordinate;
+          if (settingSourceMode) {
+            // set manual source and exit setting mode
+            setManualSource(coord);
+            setUseDeviceAsSource(false);
+            setSettingSourceMode(false);
+            Alert.alert('Source set', 'Manual source set. You can now plan routes from this location.');
+            // fit to show both source/destination if available
+            if (mapRef.current && (destination || currentLocation)) {
+              const fitCoords = [coord];
+              if (destination) fitCoords.push(destination);
+              if (currentLocation && useDeviceAsSource) fitCoords.push(currentLocation);
+              mapRef.current.fitToCoordinates(fitCoords, { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 } });
+            }
+            return;
+          }
+          setDestination(coord);
+          if (currentLocation && mapRef.current) {
+            mapRef.current.fitToCoordinates([currentLocation, coord], {
+              edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+            });
+          }
+        }}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         showsUserLocation
@@ -314,11 +442,22 @@ const MapScreen = () => {
               }
         }
       >
-        {currentLocation && (
+        {/* Source marker: device or manual */}
+        {useDeviceAsSource && currentLocation && (
           <Marker
             coordinate={currentLocation}
-            title="Your Location"
+            title="Source (Device)"
             pinColor="blue"
+            identifier="source-device"
+          />
+        )}
+        {!useDeviceAsSource && manualSource && (
+          <Marker
+            coordinate={manualSource}
+            title="Source (Manual)"
+            pinColor="purple"
+            draggable
+            onDragEnd={(e) => setManualSource(e.nativeEvent.coordinate)}
           />
         )}
         
@@ -327,6 +466,11 @@ const MapScreen = () => {
             coordinate={destination}
             title="Destination"
             pinColor="red"
+            draggable
+            onDragEnd={(e) => {
+              const coord = e.nativeEvent.coordinate;
+              setDestination(coord);
+            }}
           />
         )}
 
@@ -354,18 +498,137 @@ const MapScreen = () => {
         )}
       </MapView>
 
+      {/* Small helper: destination selection */}
+      <View style={styles.destinationHint}>
+        <Text style={styles.hintText}>
+          {settingSourceMode ? 'Tap map to set source location' : 'Tap the map to set your destination. Drag the red pin to fine-tune.'}
+        </Text>
+
+        {/* Toggle source mode */}
+        <View style={{ flexDirection: 'row', marginTop: 6, alignItems: 'center', justifyContent: 'center' }}>
+          <TouchableOpacity
+            style={{ marginRight: 8 }}
+            onPress={() => {
+              // toggle between using device location and manual source
+              if (useDeviceAsSource) {
+                // switch to manual: enable setting mode
+                setSettingSourceMode(true);
+                setUseDeviceAsSource(false);
+                Alert.alert('Set source', 'Tap the map to set a manual source location.');
+              } else {
+                // revert to device location
+                setUseDeviceAsSource(true);
+                setManualSource(null);
+                setSettingSourceMode(false);
+                Alert.alert('Using device location as source');
+              }
+            }}
+          >
+            <Text style={{ color: '#007AFF', fontWeight: '600' }}>
+              {useDeviceAsSource ? 'Set source manually' : 'Use device as source'}
+            </Text>
+          </TouchableOpacity>
+          {!useDeviceAsSource && (
+            <TouchableOpacity onPress={() => { setSettingSourceMode(true); Alert.alert('Set source', 'Tap the map to set a manual source location.'); }}>
+              <Text style={{ color: '#007AFF' }}>Set source</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {destination && (
+          <TouchableOpacity style={styles.clearButton} onPress={() => setDestination(null)}>
+            <Text style={styles.clearText}>Clear destination</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Tracking Controls - only show Start Navigation if using device as source */}
+      {selectedRoute && !isTracking && useDeviceAsSource && (
+        <View style={styles.trackingContainer}>
+          <TouchableOpacity style={styles.startButton} onPress={startTracking}>
+            <Text style={styles.buttonText}>Start Navigation</Text>
+          </TouchableOpacity>
+
+          {/* See Walking Experience button */}
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#0066CC', marginTop: 8 }]}
+            onPress={() => {
+              if (isSVRoadRoute(selectedRoute)) openExperience();
+              else Alert.alert('Walking experience', 'Walking experience coming soon for this route.');
+            }}
+          >
+            <Text style={styles.buttonText}>See Walking Experience</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* See Walking Experience button - always show if route selected and NOT using device as source */}
+      {selectedRoute && !isTracking && !useDeviceAsSource && (
+        <View style={styles.trackingContainer}>
+          <TouchableOpacity
+            style={[styles.startButton, { backgroundColor: '#0066CC' }]}
+            onPress={() => {
+              if (isSVRoadRoute(selectedRoute)) openExperience();
+              else Alert.alert('Walking experience', 'Walking experience coming soon for this route.');
+            }}
+          >
+            <Text style={styles.buttonText}>See Walking Experience</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Experience modal - show embed for SV Road, placeholder otherwise */}
+      <Modal visible={showExperienceModal} animationType="slide" onRequestClose={() => setShowExperienceModal(false)}>
+        <View style={{ flex: 1 }}>
+          <View style={{ height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, backgroundColor: '#fff' }}>
+            <TouchableOpacity onPress={() => setShowExperienceModal(false)}>
+              <Text style={{ color: '#007AFF', fontWeight: '600' }}>Close</Text>
+            </TouchableOpacity>
+            <Text style={{ fontWeight: '700' }}>Walking Experience</Text>
+            <View style={{ width: 48 }} />
+          </View>
+
+          {selectedRoute && isSVRoadRoute(selectedRoute) ? (
+            // Show Mapillary embeds for SV Road
+            <>
+              <WebView
+                originWhitelist={['*']}
+                source={{
+                  html: `<html><head><meta name="viewport" content="initial-scale=1.0"/></head><body style="margin:0;padding:0;">` +
+                        `<iframe src="${mapillaryEmbeds[experienceIndex]}" style="border:0;width:100%;height:100vh;"></iframe>` +
+                        `</body></html>`
+                }}
+                style={{ flex: 1 }}
+                allowsInlineMediaPlayback
+              />
+
+              <View style={{ height: 64, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, backgroundColor: '#fff' }}>
+                <TouchableOpacity onPress={prevExperience} disabled={experienceIndex === 0}>
+                  <Text style={{ color: experienceIndex === 0 ? '#aaa' : '#007AFF', fontWeight: '600' }}>Prev</Text>
+                </TouchableOpacity>
+                <Text style={{ fontWeight: '600' }}>{experienceIndex + 1} / {mapillaryEmbeds.length}</Text>
+                <TouchableOpacity onPress={nextExperience} disabled={experienceIndex === mapillaryEmbeds.length - 1}>
+                  <Text style={{ color: experienceIndex === mapillaryEmbeds.length - 1 ? '#aaa' : '#007AFF', fontWeight: '600' }}>Next</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            // Show "coming soon" placeholder for non-SV Road routes
+            <WebView
+              originWhitelist={['*']}
+              source={{
+                html: `<html><head><meta name="viewport" content="initial-scale=1.0"/></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:20px;"><div style="text-align:center;font-family:sans-serif;"><h2 style="color:#333;">Walking Experience Coming Soon</h2><p style="color:#666;">Street-level imagery is not yet available for this route.</p></div></body></html>`
+              }}
+              style={{ flex: 1 }}
+            />
+          )}
+        </View>
+      </Modal>
+
       {/* Route Planning Form */}
       {showRouteForm && (
         <View style={styles.formContainer}>
           <Text style={styles.title}>Plan Your Safe Walk</Text>
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Destination (optional for exploration)"
-            value={destinationInput}
-            onChangeText={setDestinationInput}
-            onSubmitEditing={() => searchLocation(destinationInput)}
-          />
           
           <TextInput
             style={styles.input}
@@ -439,15 +702,6 @@ const MapScreen = () => {
         </ScrollView>
       )}
 
-      {/* Tracking Controls */}
-      {selectedRoute && !isTracking && (
-        <View style={styles.trackingContainer}>
-          <TouchableOpacity style={styles.startButton} onPress={startTracking}>
-            <Text style={styles.buttonText}>Start Navigation</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Tracking Info */}
       {isTracking && (
         <View style={styles.trackingInfo}>
@@ -479,9 +733,32 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  destinationHint: {
+    position: 'absolute',
+    top: 12,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    elevation: 20,      // raised so it's above the form on Android
+    zIndex: 9999,       // ensure it's on top (iOS / general)
+  },
+  hintText: {
+    fontSize: 13,
+    color: '#333',
+  },
+  clearButton: {
+    marginTop: 6,
+    alignSelf: 'center',
+  },
+  clearText: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
   formContainer: {
     position: 'absolute',
-    top: 50,
+    top: 110,           // moved down so it doesn't cover the manual source hint
     left: 20,
     right: 20,
     backgroundColor: 'white',
@@ -492,6 +769,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    zIndex: 1,          // keep form below the destinationHint
   },
   routeContainer: {
     position: 'absolute',

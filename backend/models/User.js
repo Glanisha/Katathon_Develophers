@@ -17,7 +17,7 @@ const UserSchema = new mongoose.Schema({
   },
 
   privacy: {
-    shareLiveLocation: { type: Boolean, default: false },
+    shareLiveLocation: { type: Boolean, default: true },
     shareWithFriendsOnly: { type: Boolean, default: true },
     discovery: { type: Boolean, default: true } // appear in "find partner" results
   },
@@ -25,6 +25,11 @@ const UserSchema = new mongoose.Schema({
   // friend management (small-scale). For high volume use separate collection.
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   blocked: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  location: {
+    lat: { type: Number },
+    lng: { type: Number },
+    updatedAt: { type: Date, default: Date.now }
+  },
 
   // basic metrics / rewards
   points: { type: Number, default: 0 },

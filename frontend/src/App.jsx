@@ -4,9 +4,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Friends from "./pages/Friends";
+
 
 // Dashboard layout and page components
-import DashboardLayout, { DashboardHome, Friends, Reports, SettingsPage } from './pages/Dashboard/Dashboard';
+import DashboardLayout, { DashboardHome,Reports, SettingsPage } from './pages/Dashboard/Dashboard';
 import MapComponent from './pages/Dashboard/Map';
 
 // Protected Route Component

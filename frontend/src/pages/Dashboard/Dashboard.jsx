@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '../../components/ui/sidebar';
 import { useNavigate, useLocation } from 'react-router-dom';
 import MapComponent from './Map';
+
  
 import {
   Sidebar,

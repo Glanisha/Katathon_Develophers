@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet';
 import { Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import api from '../../../api';
@@ -8,37 +16,46 @@ import { useAuth } from '../../context/AuthContext';
 // Fix for default marker icons in React-Leaflet
 delete Icon.Default.prototype._getIconUrl;
 Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
 // Custom icons
 const currentLocationIcon = new Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+  shadowSize: [41, 41],
 });
 
 const destinationIcon = new Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+  shadowSize: [41, 41],
 });
 
 const friendIcon = new Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconUrl:
+    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl:
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
-  shadowSize: [41, 41]
+  shadowSize: [41, 41],
 });
 
 // Component to handle map click events
@@ -54,7 +71,7 @@ function MapClickHandler({ onMapClick }) {
 // Component to center map on user location
 function LocationMarker({ position }) {
   const map = useMap();
-  
+
   useEffect(() => {
     if (position) {
       map.setView(position, 15);
@@ -66,11 +83,13 @@ function LocationMarker({ position }) {
 
 const Map = () => {
   const { user } = useAuth();
+
+  const [friendsAroundMe, setFriendsAroundMe] = useState([]); // friends near my live location
   const [currentLocation, setCurrentLocation] = useState(null);
   const [destination, setDestination] = useState(null);
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
-  const [nearbyFriends, setNearbyFriends] = useState([]);
+  const [nearbyFriends, setNearbyFriends] = useState([]); // friends near destination/route
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [routePreference, setRoutePreference] = useState('safest');
@@ -82,7 +101,7 @@ const Map = () => {
         (position) => {
           const coords = {
             lat: position.coords.latitude,
-            lon: position.coords.longitude
+            lon: position.coords.longitude,
           };
           setCurrentLocation(coords);
         },
@@ -96,11 +115,47 @@ const Map = () => {
     }
   }, []);
 
+  // 🔁 Keep backend updated with my live location & fetch friends around me
+  useEffect(() => {
+    if (!user || !currentLocation) return;
+
+    const updateLocationAndFetchFriends = async () => {
+      try {
+        // 1️⃣ Update my live location in backend
+        await api.post('/map/update-location', {
+          coordinates: {
+            lat: currentLocation.lat,
+            lng: currentLocation.lon,
+          },
+        });
+
+        // 2️⃣ Get friends near my current location
+        const res = await api.post('/map/nearby-friends', {
+          coordinates: {
+            lat: currentLocation.lat,
+            lng: currentLocation.lon,
+          },
+          radius: 3000, // 3 km
+        });
+
+        // backend returns { friends: [...] }
+        setFriendsAroundMe(res.data.friends || []);
+      } catch (err) {
+        console.error('Friend location error:', err);
+      }
+    };
+
+    updateLocationAndFetchFriends();
+    const interval = setInterval(updateLocationAndFetchFriends, 30000);
+    return () => clearInterval(interval);
+  }, [user, currentLocation]);
+
   // Handle map click for destination
   const handleMapClick = (latlng) => {
     setDestination({ lat: latlng.lat, lon: latlng.lng });
     setRoutes([]);
     setSelectedRoute(null);
+    setNearbyFriends([]);
   };
 
   // Calculate routes when destination is set
@@ -108,6 +163,7 @@ const Map = () => {
     if (currentLocation && destination) {
       calculateRoutes();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLocation, destination, routePreference]);
 
   const calculateRoutes = async () => {
@@ -118,7 +174,7 @@ const Map = () => {
       const response = await api.post('/map/calculate-route', {
         origin: currentLocation,
         destination: destination,
-        preferences: { routeType: routePreference }
+        preferences: { routeType: routePreference },
       });
 
       setRoutes(response.data.routes || []);
@@ -126,10 +182,13 @@ const Map = () => {
         setSelectedRoute(0);
       }
 
-      // Fetch nearby friends
+      // Fetch nearby friends relative to destination
       const friendsResponse = await api.post('/map/nearby-friends', {
-        coordinates: [destination.lon, destination.lat],
-        radius: 5000
+        coordinates: {
+          lat: destination.lat,
+          lng: destination.lon,
+        },
+        radius: 5000,
       });
 
       setNearbyFriends(friendsResponse.data.friends || []);
@@ -144,11 +203,11 @@ const Map = () => {
   // Get route polyline coordinates
   const getRouteCoordinates = (route) => {
     if (!route || !route.legs) return [];
-    
+
     const coordinates = [];
-    route.legs.forEach(leg => {
+    route.legs.forEach((leg) => {
       if (leg.points) {
-        leg.points.forEach(point => {
+        leg.points.forEach((point) => {
           coordinates.push([point.latitude, point.longitude]);
         });
       }
@@ -216,7 +275,9 @@ const Map = () => {
         {/* Route Options */}
         {routes.length > 0 && (
           <div className="mt-4">
-            <h3 className="font-medium text-gray-700 mb-2">Available Routes:</h3>
+            <h3 className="font-medium text-gray-700 mb-2">
+              Available Routes:
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {routes.map((route, index) => (
                 <div
@@ -232,14 +293,22 @@ const Map = () => {
                     <span className="font-medium">Route {index + 1}</span>
                     <span
                       className="px-2 py-1 rounded text-xs font-medium text-white"
-                      style={{ backgroundColor: getRouteColor(route.safetyScore) }}
+                      style={{
+                        backgroundColor: getRouteColor(route.safetyScore),
+                      }}
                     >
                       Safety: {Math.round(route.safetyScore)}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600">
-                    <div>Distance: {(route.lengthInMeters / 1000).toFixed(2)} km</div>
-                    <div>Time: {Math.round(route.travelTimeInSeconds / 60)} min</div>
+                    <div>
+                      Distance:{' '}
+                      {(route.lengthInMeters / 1000).toFixed(2)} km
+                    </div>
+                    <div>
+                      Time:{' '}
+                      {Math.round(route.travelTimeInSeconds / 60)} min
+                    </div>
                   </div>
                 </div>
               ))}
@@ -247,10 +316,12 @@ const Map = () => {
           </div>
         )}
 
-        {/* Nearby Friends */}
+        {/* Nearby Friends relative to destination */}
         {nearbyFriends.length > 0 && (
           <div className="mt-4">
-            <h3 className="font-medium text-gray-700 mb-2">Friends Nearby:</h3>
+            <h3 className="font-medium text-gray-700 mb-2">
+              Friends Near Destination:
+            </h3>
             <div className="flex flex-wrap gap-2">
               {nearbyFriends.map((friend) => (
                 <div
@@ -264,7 +335,9 @@ const Map = () => {
                       className="w-8 h-8 rounded-full"
                     />
                   )}
-                  <span className="text-sm">{friend.displayName}</span>
+                  <span className="text-sm">
+                    {friend.displayName || friend.name}
+                  </span>
                   <button className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
                     Invite
                   </button>
@@ -300,6 +373,24 @@ const Map = () => {
             </Marker>
           )}
 
+          {/* Friends Around Me Markers */}
+          {friendsAroundMe.map((friend) =>
+            typeof friend.lat === 'number' &&
+            typeof friend.lng === 'number' ? (
+              <Marker
+                key={friend.id}
+                position={[friend.lat, friend.lng]}
+                icon={friendIcon}
+              >
+                <Popup>
+                  <strong>{friend.displayName || friend.name}</strong>
+                  <br />
+                  Nearby friend
+                </Popup>
+              </Marker>
+            ) : null
+          )}
+
           {/* Destination Marker */}
           {destination && (
             <Marker
@@ -314,7 +405,7 @@ const Map = () => {
           {routes.map((route, index) => {
             const coordinates = getRouteCoordinates(route);
             const isSelected = selectedRoute === index;
-            
+
             return coordinates.length > 0 ? (
               <Polyline
                 key={index}

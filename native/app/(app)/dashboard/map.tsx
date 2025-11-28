@@ -48,6 +48,7 @@ const MapScreen = () => {
   const [loading, setLoading] = useState(false);
   const [showExperienceModal, setShowExperienceModal] = useState(false);
   const [experienceIndex, setExperienceIndex] = useState(0);
+  const [incidents, setIncidents] = useState<any[]>([]);
 
   const mapRef = useRef<MapView>(null);
   const watchIdRef = useRef<Location.LocationSubscription | null>(null);
@@ -63,12 +64,44 @@ const MapScreen = () => {
 
   useEffect(() => {
     getCurrentLocation();
+    loadIncidents(); // Add this
     return () => {
       if (watchIdRef.current) {
         watchIdRef.current.remove();
       }
     };
   }, []);
+
+  const loadIncidents = async () => {
+    try {
+      const response = await api.get('/incidents/all');
+      setIncidents(response.data.incidents || []);
+    } catch (error) {
+      console.error('Load incidents error:', error);
+    }
+  };
+
+  // Add verification function
+  const verifyIncident = async (incidentId: string) => {
+    try {
+      await api.post(`/incidents/verify/${incidentId}`);
+      Alert.alert('Verified', 'Thank you for verifying this incident!');
+      await loadIncidents(); // Reload incidents
+    } catch (error) {
+      console.error('Verify incident error:', error);
+      Alert.alert('Error', 'Failed to verify incident');
+    }
+  };
+
+  // Add this function to get marker color based on severity
+  const getSeverityColor = (severity: string) => {
+    switch(severity) {
+      case 'fine': return '#34C759'; // Green
+      case 'moderate': return '#FF9500'; // Orange
+      case 'dangerous': return '#FF3B30'; // Red
+      default: return '#007AFF'; // Blue
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -395,6 +428,8 @@ const MapScreen = () => {
   const prevExperience = () => setExperienceIndex(i => Math.max(0, i - 1));
   const nextExperience = () => setExperienceIndex(i => Math.min(mapillaryEmbeds.length - 1, i + 1));
 
+  
+
   return (
     <View style={styles.container}>
       <MapView
@@ -496,6 +531,30 @@ const MapScreen = () => {
             strokeWidth={4}
           />
         )}
+
+        {/* Incident Markers - Heatmap Style */}
+        {incidents.map((incident, index) => (
+          <Marker
+            key={`incident-${index}`}
+            coordinate={{
+              latitude: incident.location.latitude,
+              longitude: incident.location.longitude
+            }}
+            title={incident.title}
+            description={incident.description}
+            pinColor={getSeverityColor(incident.severity)}
+            onPress={() => {
+              Alert.alert(
+                incident.title,
+                `${incident.description}\n\nSeverity: ${incident.severity.toUpperCase()}\nReported by: ${incident.user.name || 'Anonymous'}`,
+                [
+                  { text: 'Verify', onPress: () => verifyIncident(incident._id) },
+                  { text: 'Close', style: 'cancel' }
+                ]
+              );
+            }}
+          />
+        ))}
       </MapView>
 
       {/* Small helper: destination selection */}

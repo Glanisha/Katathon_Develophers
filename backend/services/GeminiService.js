@@ -84,6 +84,61 @@ class GeminiService {
       return 'Have a safe walk!';
     }
   }
+
+  // ...existing code...
+
+  async analyzeIncidentImage(imageUrl, description) {
+    try {
+      if (!this.apiKey) {
+        console.warn('Gemini API key not available');
+        return { severity: 'moderate', confidence: 0.5, description: 'Analysis unavailable' };
+      }
+
+      const model = this.client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const prompt = `You are a safety incident analyzer. Analyze this image and description of an incident.
+      
+Description from user: "${description}"
+
+Analyze the image and classify the incident severity as one of:
+- "fine": No significant safety concern
+- "moderate": Moderate safety risk (minor accidents, debris, small hazards)
+- "dangerous": High safety risk (major accidents, structural damage, riots, flooding)
+
+Respond in JSON format only:
+{
+  "severity": "fine|moderate|dangerous",
+  "confidence": 0.0-1.0,
+  "description": "Brief analysis of the incident",
+  "category": "accident|riot|pothole|flooding|structural_damage|debris|other"
+}`;
+
+      const response = await model.generateContent([
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: Buffer.from(await fetch(imageUrl).then(r => r.arrayBuffer())).toString('base64')
+          }
+        },
+        prompt
+      ]);
+
+      const text = response.response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+
+      return { severity: 'moderate', confidence: 0.7, description: text, category: 'other' };
+    } catch (error) {
+      console.error('Gemini analysis error:', error);
+      return { severity: 'moderate', confidence: 0.5, description: 'Analysis error' };
+    }
+  }
+
+// ...existing code...
 }
+
+
 
 module.exports = new GeminiService();

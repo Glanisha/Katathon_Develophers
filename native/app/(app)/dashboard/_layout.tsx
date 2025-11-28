@@ -74,11 +74,11 @@ export default function DashboardLayout() {
       />
 
       <Tabs.Screen
-        name="settings"
+        name="report"
         options={{
-          title: 'Settings',
+          title: 'Report',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="warning-outline" size={size} color={color} />
           ),
         }}
       />

@@ -6,6 +6,8 @@ require('dotenv').config();
 const cors = require('cors'); 
 const authRoutes = require('./routes/AuthRoutes');
 const mapRoutes = require('./routes/MapRoutes');
+const friendsRoutes = require('./routes/FriendsRoutes');
+const incidentRoutes = require('./routes/IncidentRoutes');
 
 
 
@@ -22,6 +24,8 @@ databaseConfig();
 
 app.use('/api/auth', authRoutes);
 app.use('/api/map', mapRoutes);
+app.use('/api/friends', friendsRoutes);
+app.use('/api/incidents', incidentRoutes);
 
 
 // Start the server

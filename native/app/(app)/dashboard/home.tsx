@@ -72,6 +72,17 @@ export default function DashboardHome() {
           </TouchableOpacity>
         </View>
 
+        {/* Points Card - Add This */}
+        <View style={styles.pointsCard}>
+          <View style={styles.pointsLeft}>
+            <Text style={styles.pointsLabel}>Your Points</Text>
+            <Text style={styles.pointsValue}>{user?.points || 0}</Text>
+          </View>
+          <View style={styles.pointsRight}>
+            <Ionicons name="star" size={40} color="#FFD700" />
+          </View>
+        </View>
+
         {/* Quick Actions */}
         <View style={styles.quickActions}>
           <TouchableOpacity 
@@ -138,14 +149,14 @@ export default function DashboardHome() {
 
           <TouchableOpacity 
             style={styles.linkCard}
-            onPress={() => router.push('/(app)/dashboard/alerts')}
+            onPress={() => router.push('/(app)/dashboard/report')}
           >
             <View style={styles.linkIcon}>
-              <Ionicons name="warning-outline" size={22} color="#18181b" />
+              <Ionicons name="alert-circle-outline" size={22} color="#18181b" />
             </View>
             <View style={styles.linkContent}>
-              <Text style={styles.linkTitle}>Safety Alerts</Text>
-              <Text style={styles.linkDesc}>View area safety reports</Text>
+              <Text style={styles.linkTitle}>Report Incident</Text>
+              <Text style={styles.linkDesc}>Help keep community safe</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
           </TouchableOpacity>
@@ -204,6 +215,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#e4e4e7',
+  },
+  pointsCard: {
+    backgroundColor: '#FFD70033',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#FFD700'
+  },
+  pointsLeft: {
+    flex: 1
+  },
+  pointsLabel: {
+    fontSize: 14,
+    color: '#71717a',
+    marginBottom: 4
+  },
+  pointsValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#FFD700'
+  },
+  pointsRight: {
+    marginLeft: 16
   },
   quickActions: {
     marginBottom: 32,

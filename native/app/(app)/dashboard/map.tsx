@@ -667,33 +667,50 @@ const MapScreen = () => {
         <ScrollView style={styles.routeContainer}>
           <Text style={styles.title}>Route Options</Text>
           {routes.map((route, index) => (
-            <TouchableOpacity
+            <View
               key={index}
               style={[
                 styles.routeCard,
                 selectedRoute === route && styles.selectedRouteCard
               ]}
-              onPress={() => selectRoute(route)}
             >
-              <Text style={styles.routeTitle}>Route {index + 1}</Text>
-              <Text style={styles.routeInfo}>
-                Distance: {(route.lengthInMeters / 1000).toFixed(1)} km
-              </Text>
-              <Text style={styles.routeInfo}>
-                Duration: {Math.round(route.travelTimeInSeconds / 60)} min
-              </Text>
-              <Text style={styles.routeInfo}>
-                Safety Score: {route.safetyScore}/100
-              </Text>
-              {route.walkabilityScore && (
-                <Text style={styles.routeInfo}>
-                  Walkability: {route.walkabilityScore}/100
-                </Text>
-              )}
-              {route.commentary && (
-                <Text style={styles.commentary}>{route.commentary}</Text>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => selectRoute(route)}>
+                <Text style={styles.routeTitle}>Route {index + 1}</Text>
+                <Text style={styles.routeInfo}>Distance: {(route.lengthInMeters / 1000).toFixed(1)} km</Text>
+                <Text style={styles.routeInfo}>Duration: {Math.round(route.travelTimeInSeconds / 60)} min</Text>
+                <Text style={styles.routeInfo}>Safety Score: {route.safetyScore}/100</Text>
+                {route.walkabilityScore && <Text style={styles.routeInfo}>Walkability: {route.walkabilityScore}/100</Text>}
+                {route.commentary && <Text style={styles.commentary}>{route.commentary}</Text>}
+              </TouchableOpacity>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.button, { flex: 1, marginRight: 8, backgroundColor: useDeviceAsSource ? '#34C759' : '#AAA' }]}
+                  onPress={async () => {
+                    await selectRoute(route);
+                    if (!useDeviceAsSource) {
+                      Alert.alert('Navigation unavailable', 'Switch to "Use device as source" to start navigation.');
+                      return;
+                    }
+                    await startTracking();
+                  }}
+                  disabled={!useDeviceAsSource}
+                >
+                  <Text style={styles.buttonText}>Start Navigation</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.button, { flex: 1, marginLeft: 8, backgroundColor: '#0066CC' }]}
+                  onPress={async () => {
+                    await selectRoute(route);
+                    if (isSVRoadRoute(route)) openExperience();
+                    else Alert.alert('Walking experience', 'Walking experience coming soon for this route.');
+                  }}
+                >
+                  <Text style={styles.buttonText}>View Experience</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ))}
           
           <TouchableOpacity style={styles.button} onPress={resetPlanning}>

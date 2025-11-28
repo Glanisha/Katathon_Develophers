@@ -1,9 +1,18 @@
-import React from 'react'
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
 
-const friends = () => {
+export default function Friends() {
   return (
-    <div>friends</div>
-  )
+    <View style={styles.container}>
+      <Text>Friends</Text>
+    </View>
+  );
 }
 
-export default friends
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});

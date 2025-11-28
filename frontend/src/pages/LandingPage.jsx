@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { ShieldCheck, Map, PhoneCall, Users, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from 'react-router-dom';
+import { MapPin, Shield, AlertTriangle } from 'lucide-react';
 
 export default function LandingPage() {
   return (

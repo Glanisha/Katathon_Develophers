@@ -77,9 +77,18 @@ class RouteService {
   async calculateSafeRoute(origin, destination, preferences = {}) {
     const { routeType = 'safest', purpose } = preferences;
 
-    // Get base routes from TomTom
+    // Map our UI-friendly preference to TomTom routeType values
+    // TomTom accepts 'shortest' and 'fastest' as primary cost models for pedestrian routing.
+    // Avoid passing unsupported values like 'balanced' which cause 400 errors.
+    let tomtomRouteType = 'shortest';
+    const rt = String(routeType || '').toLowerCase();
+    if (rt === 'fastest') tomtomRouteType = 'fastest';
+    if (rt === 'shortest' || rt === 'short') tomtomRouteType = 'shortest';
+    // If UI requested 'safest' or 'balanced', fall back to 'shortest' as a safe default.
+
+    // Get base routes from TomTom using mapped routeType
     const routeData = await TomTomService.calculateRoute(origin, destination, {
-      routeType: 'shortest',
+      routeType: tomtomRouteType,
       maxAlternatives: 3
     });
 

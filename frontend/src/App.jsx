@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Friends from "./pages/Friends";
+
 
 // Dashboard layout and pages
 import DashboardLayout, { 

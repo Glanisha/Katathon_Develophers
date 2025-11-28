@@ -1,3 +1,6 @@
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
 const IncidentSchema = new Schema({
   reporter: { type: Schema.Types.ObjectId, ref: 'User' }, // optional
   source: { type: String, enum: ['user','city_feed','tomtom','other'], default: 'user' },

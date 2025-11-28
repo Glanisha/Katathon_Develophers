@@ -15,6 +15,12 @@ router.post('/calculate-route', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Origin is required' });
     }
 
+    // Basic validation/logging to help diagnose bad client payloads
+    console.debug('Calculate-route payload', { origin, destination, preferences });
+    if (typeof origin.lat !== 'number' || typeof origin.lng !== 'number') {
+      return res.status(400).json({ error: 'Origin coordinates must be numeric { lat, lng }' });
+    }
+
     // If no destination provided, handle exploration mode
     if (!destination && preferences.purpose) {
       try {
@@ -30,6 +36,10 @@ router.post('/calculate-route', authMiddleware, async (req, res) => {
 
     if (!destination) {
       return res.status(400).json({ error: 'Destination is required when not in exploration mode' });
+    }
+
+    if (typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+      return res.status(400).json({ error: 'Destination coordinates must be numeric { lat, lng }' });
     }
 
     const routes = await RouteService.calculateSafeRoute(origin, destination, preferences);
@@ -94,7 +104,31 @@ router.get('/weather/:lat/:lng', authMiddleware, async (req, res) => {
   }
 });
 
-// ...existing routes...
+//
+// 🔹 NEW: update current user's live location
+// Body: { coordinates: { lat: number, lng: number } }
+//
+router.post('/update-location', authMiddleware, async (req, res) => {
+  try {
+    const { coordinates } = req.body; // { lat, lng }
+    const userId = req.user._id;
+
+    if (!coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lng !== 'number') {
+      return res.status(400).json({ error: 'coordinates must be { lat: number, lng: number }' });
+    }
+
+    const user = await UserService.updateUserLocation(userId, coordinates);
+    res.json({ user });
+  } catch (error) {
+    console.error('Update location error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//
+// ✅ Existing: find nearby friends (now using real coordinates from UserService)
+// Body: { coordinates: { lat, lng }, radius: number }
+//
 router.post('/nearby-friends', authMiddleware, async (req, res) => {
   try {
     const { coordinates, radius } = req.body;

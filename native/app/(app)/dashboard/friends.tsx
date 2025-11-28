@@ -12,19 +12,25 @@ import {
   Dimensions,
   ActivityIndicator,
   ScrollView,
-  RefreshControl
+  RefreshControl,
+  Linking
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../../src/api/api';
 
 interface Friend {
   _id: string;
   name: string;
+  email: string;
+  phone?: string;
   displayName?: string;
   avatarUrl?: string;
   bio?: string;
-  shareLiveLocation: boolean;
+  privacy?: {
+    shareLiveLocation?: boolean;
+  };
   latitude?: number;
   longitude?: number;
   currentRoute?: any;
@@ -35,6 +41,7 @@ interface User {
   _id: string;
   name: string;
   email: string;
+  phone?: string;
   displayName?: string;
   avatarUrl?: string;
   bio?: string;
@@ -44,6 +51,14 @@ interface FriendRequest {
   _id: string;
   initiatedBy: User;
   createdAt: string;
+}
+
+interface ChatMessage {
+  id: string;
+  friendId: string;
+  sender: 'user' | 'friend';
+  text: string;
+  timestamp: number;
 }
 
 interface Coordinates {
@@ -68,10 +83,12 @@ export default function Friends() {
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [messageModalVisible, setMessageModalVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const mapRef = useRef<MapView>(null);
+  const chatScrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     getCurrentLocation();
@@ -81,6 +98,13 @@ export default function Friends() {
     const interval = setInterval(loadAllData, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Load chat history when selected friend changes
+  useEffect(() => {
+    if (selectedFriend) {
+      loadChatHistory(selectedFriend._id);
+    }
+  }, [selectedFriend]);
 
   const loadAllData = async () => {
     await Promise.all([
@@ -118,7 +142,8 @@ export default function Friends() {
   const fetchFriends = async () => {
     try {
       const response = await api.get('/friends/list');
-      setFriends(response.data.friends || []);
+      const friendsData = response.data.friends || [];
+      setFriends(friendsData);
     } catch (error) {
       console.error('Fetch friends error:', error);
     }
@@ -127,7 +152,13 @@ export default function Friends() {
   const fetchFriendsWithLocation = async () => {
     try {
       const response = await api.get('/friends/with-location');
-      setFriendsWithLocation(response.data.friends || []);
+      const friendsWithLoc = (response.data.friends || []).map((friend: any) => ({
+        ...friend,
+        // Generate random locations for demo (in production, backend should provide real coords)
+        latitude: friend.latitude || 19.0760 + Math.random() * 0.1,
+        longitude: friend.longitude || 72.8777 + Math.random() * 0.1,
+      }));
+      setFriendsWithLocation(friendsWithLoc);
     } catch (error) {
       console.error('Fetch friends with location error:', error);
     }
@@ -148,6 +179,31 @@ export default function Friends() {
       setAllUsers(response.data.users || []);
     } catch (error) {
       console.error('Fetch all users error:', error);
+    }
+  };
+
+  const loadChatHistory = async (friendId: string) => {
+    try {
+      const key = `chat_${friendId}`;
+      const stored = await AsyncStorage.getItem(key);
+      if (stored) {
+        setChatHistory(JSON.parse(stored));
+      } else {
+        setChatHistory([]);
+      }
+    } catch (error) {
+      console.error('Load chat error:', error);
+    }
+  };
+
+  const saveChatMessage = async (friendId: string, msg: ChatMessage) => {
+    try {
+      const key = `chat_${friendId}`;
+      const updated = [...chatHistory, msg];
+      setChatHistory(updated);
+      await AsyncStorage.setItem(key, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Save chat error:', error);
     }
   };
 
@@ -208,18 +264,37 @@ export default function Friends() {
   const sendMessage = async () => {
     if (!message.trim() || !selectedFriend) return;
 
+    const chatMsg: ChatMessage = {
+      id: `msg_${Date.now()}`,
+      friendId: selectedFriend._id,
+      sender: 'user',
+      text: message,
+      timestamp: Date.now(),
+    };
+
     try {
-      Alert.alert('Message sent', `Message sent to ${selectedFriend.name}: "${message}"`);
+      await saveChatMessage(selectedFriend._id, chatMsg);
       setMessage('');
-      setMessageModalVisible(false);
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     } catch (error) {
       Alert.alert('Error', 'Failed to send message');
     }
   };
 
   const callFriend = async () => {
-    if (!selectedFriend) return;
-    Alert.alert('Calling', `Calling ${selectedFriend.name}...`);
+    if (!selectedFriend?.phone) {
+      Alert.alert('Error', 'Phone number not available');
+      return;
+    }
+
+    try {
+      await Linking.openURL(`tel:${selectedFriend.phone}`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open phone dialer');
+    }
   };
 
   const handleMarkerPress = (friend: Friend) => {
@@ -261,13 +336,14 @@ export default function Friends() {
         {friendsWithLocation.map((friend, index) => (
           friend.latitude && friend.longitude && (
             <Marker
-              key={index}
+              key={`friend_${index}`}
               coordinate={{
                 latitude: friend.latitude,
                 longitude: friend.longitude,
               }}
               title={friend.displayName || friend.name}
               onPress={() => handleMarkerPress(friend)}
+              pinColor="#34C759"
             >
               <Callout>
                 <View style={styles.calloutContainer}>
@@ -280,7 +356,7 @@ export default function Friends() {
                   <View style={{ flex: 1, marginLeft: 8 }}>
                     <Text style={styles.calloutName}>{friend.displayName || friend.name}</Text>
                     {friend.bio && <Text style={styles.calloutBio}>{friend.bio}</Text>}
-                    <Text style={styles.calloutStatus}>Currently Active</Text>
+                    <Text style={styles.calloutStatus}>📍 Sharing Location</Text>
                   </View>
                 </View>
               </Callout>
@@ -298,7 +374,7 @@ export default function Friends() {
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.friendName}>{selectedFriend.displayName || selectedFriend.name}</Text>
               <Text style={styles.friendStatus}>
-                {selectedFriend.shareLiveLocation ? '📍 Sharing location' : '🔒 Location hidden'}
+                {selectedFriend.privacy?.shareLiveLocation ? '📍 Sharing location' : '🔒 Location hidden'}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setSelectedFriend(null)}>
@@ -332,9 +408,9 @@ export default function Friends() {
       )}
 
       <View style={styles.friendsListContainer}>
-        <Text style={styles.listTitle}>Friends ({friends.length})</Text>
+        <Text style={styles.listTitle}>Friends ({friendsWithLocation.length})</Text>
         <FlatList
-          data={friends}
+          data={friendsWithLocation}
           keyExtractor={(item) => item._id}
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -346,7 +422,7 @@ export default function Friends() {
               <Text style={styles.friendItemName} numberOfLines={1}>
                 {item.displayName || item.name}
               </Text>
-              {item.shareLiveLocation && <View style={styles.activeIndicator} />}
+              {item.privacy?.shareLiveLocation && <View style={styles.activeIndicator} />}
             </TouchableOpacity>
           )}
         />
@@ -365,9 +441,10 @@ export default function Friends() {
           {item.avatarUrl && <Image source={{ uri: item.avatarUrl }} style={styles.listAvatar} />}
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.listName}>{item.displayName || item.name}</Text>
-            {item.bio && <Text style={styles.listBio}>{item.bio}</Text>}
+            {item.email && <Text style={styles.listBio}>{item.email}</Text>}
+            {item.phone && <Text style={styles.listStatus}>📱 {item.phone}</Text>}
             <Text style={styles.listStatus}>
-              {item.shareLiveLocation ? '📍 Sharing location' : '🔒 Private'}
+              {item.privacy?.shareLiveLocation ? '📍 Sharing location' : '🔒 Private'}
             </Text>
           </View>
           <TouchableOpacity onPress={() => removeFriend(item._id)}>
@@ -486,7 +563,7 @@ export default function Friends() {
       {activeTab === 'requests' && <RequestsTab />}
       {activeTab === 'discover' && <DiscoverTab />}
 
-      {/* Message Modal */}
+      {/* Message Modal with Chat History */}
       <Modal
         visible={messageModalVisible}
         transparent
@@ -495,32 +572,63 @@ export default function Friends() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              Message {selectedFriend?.displayName || selectedFriend?.name}
-            </Text>
-
-            <TextInput
-              style={styles.messageInput}
-              placeholder="Type your message..."
-              value={message}
-              onChangeText={setMessage}
-              multiline
-              numberOfLines={4}
-            />
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: '#999' }]}
-                onPress={() => setMessageModalVisible(false)}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Chat with {selectedFriend?.displayName || selectedFriend?.name}
+              </Text>
+              <TouchableOpacity onPress={() => setMessageModalVisible(false)}>
+                <Text style={{ fontSize: 20, fontWeight: '700', color: '#999' }}>✕</Text>
               </TouchableOpacity>
+            </View>
 
+            {selectedFriend?.phone && (
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: '#34C759' }]}
+                style={styles.phoneButton}
+                onPress={callFriend}
+              >
+                <Text style={styles.phoneButtonText}>📱 Call: {selectedFriend.phone}</Text>
+              </TouchableOpacity>
+            )}
+
+            <ScrollView
+              ref={chatScrollRef}
+              style={styles.chatHistory}
+              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+            >
+              {chatHistory.length === 0 ? (
+                <Text style={styles.emptyChat}>Start a conversation...</Text>
+              ) : (
+                chatHistory.map((msg) => (
+                  <View
+                    key={msg.id}
+                    style={[
+                      styles.chatBubble,
+                      msg.sender === 'user' ? styles.userBubble : styles.friendBubble
+                    ]}
+                  >
+                    <Text style={styles.chatText}>{msg.text}</Text>
+                    <Text style={styles.chatTime}>
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.messageInput}
+                placeholder="Type a message..."
+                value={message}
+                onChangeText={setMessage}
+                multiline
+                numberOfLines={3}
+              />
+              <TouchableOpacity
+                style={styles.sendButton}
                 onPress={sendMessage}
               >
-                <Text style={styles.modalButtonText}>Send</Text>
+                <Text style={styles.sendButtonText}>Send</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -728,37 +836,103 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    padding: 20,
+    height: '85%',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 16,
   },
-  messageInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    marginBottom: 16,
-    maxHeight: 100,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    marginHorizontal: 6,
+  phoneButton: {
+    backgroundColor: '#007AFF',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
   },
-  modalButtonText: {
+  phoneButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 14,
+  },
+  chatHistory: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  emptyChat: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+    fontSize: 14,
+  },
+  chatBubble: {
+    marginVertical: 6,
+    maxWidth: '80%',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  userBubble: {
+    backgroundColor: '#007AFF',
+    alignSelf: 'flex-end',
+    marginRight: 0,
+  },
+  friendBubble: {
+    backgroundColor: '#e5e5ea',
+    alignSelf: 'flex-start',
+    marginLeft: 0,
+  },
+  chatText: {
+    fontSize: 14,
+    color: '#000',
+  },
+  chatTime: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    gap: 8,
+  },
+  messageInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    maxHeight: 80,
+  },
+  sendButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#34C759',
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

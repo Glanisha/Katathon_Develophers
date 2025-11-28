@@ -9,6 +9,7 @@ const mapRoutes = require('./routes/MapRoutes');
 const friendsRoutes = require('./routes/FriendsRoutes');
 const incidentRoutes = require('./routes/IncidentRoutes');
 const emergencyRoutes = require('./routes/EmergencyRoutes');
+const lightingRoute = require("./routes/LightingReportRoute");
 
 
 
@@ -28,6 +29,7 @@ app.use('/api/map', mapRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/emergency-contacts', emergencyRoutes);
+app.use("/", lightingRoute);
 
 
 // Start the server

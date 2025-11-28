@@ -10,8 +10,7 @@ import Friends from "./pages/Friends";
 
 // Dashboard layout and pages
 import DashboardLayout, { 
-  DashboardHome, 
-  Friends, 
+  DashboardHome,  
   Reports, 
   SettingsPage, 
   EmergencyContacts   // ✅ NEW IMPORT

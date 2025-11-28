@@ -1,3 +1,6 @@
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
 const WalkSessionSchema = new Schema({
   host: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   route: { type: Schema.Types.ObjectId, ref: 'Route' },

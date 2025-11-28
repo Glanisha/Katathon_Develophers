@@ -1,3 +1,6 @@
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
 const RouteSchema = new Schema({
   owner: { type: Schema.Types.ObjectId, ref: 'User', index: true },
   title: { type: String },

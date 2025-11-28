@@ -15,6 +15,10 @@ const connectDB = async () => {
         serverSelectionTimeoutMS: 10000, // fail fast
     };
 
+    // Mongoose deprecation settings
+    // ensure findOneAndUpdate/findOneAndDelete use native findOneAndUpdate behavior
+    mongoose.set('useFindAndModify', false);
+
     let attempts = 0;
     const maxAttempts = 5;
 

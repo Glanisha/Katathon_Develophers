@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import friendsService from "../services/friendsService";
 
 const Friends = () => {
   const { token, isAuthenticated } = useAuth();
@@ -11,91 +11,72 @@ const Friends = () => {
   const [requests, setRequests] = useState([]);
   const [sentRequests, setSentRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  const API_URL = "http://localhost:5000/api"; // Update if deployed
+  const [error, setError] = useState("");
 
   const fetchFriends = async () => {
     if (!token) return;
     try {
-      const res = await axios.get(`${API_URL}/friends/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      // Accept either `{ friends: [...] }` or raw array for compatibility
-      setFriends(res.data.friends ?? res.data ?? []);
+      const data = await friendsService.getFriends();
+      setFriends(data);
     } catch (err) {
-      console.error("Fetch Friends Error:", err);
+      console.error("Fetch friends error:", err.message);
     }
   };
 
   const fetchRequests = async () => {
     if (!token) return;
     try {
-      const res = await axios.get(`${API_URL}/friends/requests`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setRequests(res.data.requests ?? []);
+      const data = await friendsService.getIncomingRequests();
+      setRequests(data);
     } catch (err) {
-      console.error('Fetch requests error', err);
+      console.error("Fetch incoming requests error:", err.message);
     }
   };
 
   const fetchSentRequests = async () => {
     if (!token) return;
     try {
-      console.log('Fetching sent requests from', `${API_URL}/friends/requests/sent`);
-      const res = await axios.get(`${API_URL}/friends/requests/sent`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log('Sent requests response:', res.data);
-      setSentRequests(res.data.requests ?? []);
+      const data = await friendsService.getSentRequests();
+      setSentRequests(data);
     } catch (err) {
-      console.error('Fetch sent requests error:', err.response?.status, err.response?.data || err.message);
+      console.error("Fetch sent requests error:", err.message);
     }
   };
 
   const addFriend = async () => {
     const query = friendEmail.trim();
     if (!query) {
-      alert('Please enter a name or email to search');
+      setError("Please enter a name or email to search");
       return;
     }
     if (!token) {
-      alert('You must be logged in to add friends.');
+      setError("You must be logged in to add friends.");
       return;
     }
 
     setLoading(true);
+    setError("");
     try {
-      const res = await axios.post(
-        `${API_URL}/friends/request`,
-        { query },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (res.data?.message) alert(res.data.message);
-      setFriendEmail('');
-      fetchRequests();
+      const result = await friendsService.sendFriendRequest(query);
+      alert(result.message || "Friend request sent");
+      setFriendEmail("");
       fetchSentRequests();
     } catch (err) {
-      if (err.response) {
-        const serverMsg = err.response?.data?.message || err.response?.data?.error || JSON.stringify(err.response.data);
-        alert(`Server error: ${serverMsg} (status ${err.response.status})`);
-      } else if (err.request) {
-        alert('Network error: No response from server. Is the backend running?');
-      } else {
-        alert(`Error: ${err.message}`);
-      }
+      setError(err.message);
+      alert(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!token) return;
+    
     fetchFriends();
     fetchRequests();
     fetchSentRequests();
 
-    // Auto-refresh incoming requests every 10 seconds so new requests appear immediately
+    // Auto-refresh incoming requests every 10 seconds
     const interval = setInterval(() => {
       fetchRequests();
     }, 10000);
@@ -119,11 +100,19 @@ const Friends = () => {
         <button
           onClick={addFriend}
           disabled={loading || !isAuthenticated}
-          title={!isAuthenticated ? 'Log in to add friends' : ''}
-          className={`text-white px-4 py-2 rounded ${isAuthenticated ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-300 cursor-not-allowed'}`}>
+          title={!isAuthenticated ? "Log in to add friends" : ""}
+          className={`text-white px-4 py-2 rounded ${
+            isAuthenticated
+              ? "bg-blue-500 hover:bg-blue-600"
+              : "bg-gray-300 cursor-not-allowed"
+          }`}
+        >
           {loading ? "Sending..." : "Send Request"}
         </button>
       </div>
+
+      {/* Error message */}
+      {error && <div className="text-red-500 text-sm mb-4">{error}</div>}
 
       {/* Incoming Requests */}
       <div className="mb-4">
@@ -132,7 +121,10 @@ const Friends = () => {
           <p className="text-gray-500 text-sm">No incoming requests</p>
         ) : (
           requests.map((r) => (
-            <div key={r._id} className="flex justify-between items-center border p-3 rounded-lg mb-2">
+            <div
+              key={r._id}
+              className="flex justify-between items-center border p-3 rounded-lg mb-2"
+            >
               <div>
                 <div className="font-medium">{r.from?.name || r.from?.email}</div>
                 <div className="text-gray-600 text-sm">{r.from?.email}</div>
@@ -141,12 +133,12 @@ const Friends = () => {
                 <button
                   onClick={async () => {
                     try {
-                      await axios.post(`${API_URL}/friends/requests/${r._id}/approve`, {}, { headers: { Authorization: `Bearer ${token}` } });
-                      alert('Friend request accepted');
+                      const result = await friendsService.approveFriendRequest(r._id);
+                      alert(result.message || "Friend request accepted");
                       fetchFriends();
                       fetchRequests();
                     } catch (err) {
-                      alert(err.response?.data?.message || 'Error accepting request');
+                      alert(err.message);
                     }
                   }}
                   className="bg-green-500 text-white px-3 py-1 rounded"
@@ -156,11 +148,11 @@ const Friends = () => {
                 <button
                   onClick={async () => {
                     try {
-                      await axios.post(`${API_URL}/friends/requests/${r._id}/decline`, {}, { headers: { Authorization: `Bearer ${token}` } });
-                      alert('Friend request declined');
+                      const result = await friendsService.declineFriendRequest(r._id);
+                      alert(result.message || "Friend request declined");
                       fetchRequests();
                     } catch (err) {
-                      alert(err.response?.data?.message || 'Error declining request');
+                      alert(err.message);
                     }
                   }}
                   className="bg-gray-300 text-black px-3 py-1 rounded"
@@ -173,7 +165,6 @@ const Friends = () => {
         )}
       </div>
 
-
       {/* Outgoing / Sent Requests */}
       <div className="mb-4">
         <h3 className="font-semibold text-gray-700 mb-2">Outgoing Requests:</h3>
@@ -181,52 +172,59 @@ const Friends = () => {
           <p className="text-gray-500 text-sm">No outgoing requests</p>
         ) : (
           sentRequests.map((r) => (
-            <div key={r._id} className="flex justify-between items-center border p-3 rounded-lg mb-2">
+            <div
+              key={r._id}
+              className="flex justify-between items-center border p-3 rounded-lg mb-2"
+            >
               <div>
                 <div className="font-medium">{r.to?.name || r.to?.email}</div>
                 <div className="text-gray-600 text-sm">{r.to?.email}</div>
               </div>
-              <div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={async () => {
-                      if (!confirm(`Cancel friend request to ${r.to?.name || r.to?.email}?`)) return;
-                      try {
-                        await axios.delete(`${API_URL}/friends/requests/${r._id}`, { headers: { Authorization: `Bearer ${token}` } });
-                        alert('Friend request canceled');
-                        fetchSentRequests();
-                      } catch (err) {
-                        alert(err.response?.data?.message || 'Error canceling request');
-                      }
-                    }}
-                    className="bg-yellow-500 text-white px-3 py-1 rounded"
-                  >
-                    Cancel
-                  </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        `Cancel friend request to ${r.to?.name || r.to?.email}?`
+                      )
+                    )
+                      return;
+                    try {
+                      const result = await friendsService.cancelRequest(r._id);
+                      alert(result.message || "Friend request canceled");
+                      fetchSentRequests();
+                    } catch (err) {
+                      alert(err.message);
+                    }
+                  }}
+                  className="bg-yellow-500 text-white px-3 py-1 rounded"
+                >
+                  Cancel
+                </button>
 
-                  <button
-                    onClick={async () => {
-                      try {
-                        // resend the friend request to the same user (acts as Undo/Resend)
-                        const query = r.to?.email || r.to?.name;
-                        if (!query) return alert('Cannot resend: missing recipient info');
-                        const res = await axios.post(`${API_URL}/friends/request`, { query }, { headers: { Authorization: `Bearer ${token}` } });
-                        alert(res.data?.message || 'Friend request resent');
-                        fetchSentRequests();
-                      } catch (err) {
-                        alert(err.response?.data?.message || 'Error resending request');
-                      }
-                    }}
-                    className="bg-blue-500 text-white px-3 py-1 rounded"
-                  >
-                    Resend
-                  </button>
-                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const query = r.to?.email || r.to?.name;
+                      if (!query)
+                        return alert("Cannot resend: missing recipient info");
+                      const result = await friendsService.sendFriendRequest(query);
+                      alert(result.message || "Friend request resent");
+                      fetchSentRequests();
+                    } catch (err) {
+                      alert(err.message);
+                    }
+                  }}
+                  className="bg-blue-500 text-white px-3 py-1 rounded"
+                >
+                  Resend
+                </button>
               </div>
             </div>
           ))
         )}
       </div>
+
       {/* Friends List */}
       <div className="mb-4">
         <h3 className="font-semibold text-gray-700 mb-2">Your Friends:</h3>
@@ -243,18 +241,16 @@ const Friends = () => {
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
-                    if (!confirm(`Remove ${friend.name} from your friends?`)) return;
-                    // debug info: log id and token presence
-                    console.log('Removing friend', { friendId: friend._id, tokenPreview: token ? `${token.slice(0,8)}...` : null });
+                    if (
+                      !confirm(`Remove ${friend.name} from your friends?`)
+                    )
+                      return;
                     try {
-                      await axios.delete(`${API_URL}/friends/${friend._id}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                      });
-                      alert('Friend removed');
+                      const result = await friendsService.removeFriend(friend._id);
+                      alert(result.message || "Friend removed");
                       fetchFriends();
                     } catch (err) {
-                      console.error('Remove friend client error', err);
-                      alert(err.response?.data?.message || 'Error removing friend');
+                      alert(err.message);
                     }
                   }}
                   className="bg-red-500 text-white px-3 py-1 rounded"

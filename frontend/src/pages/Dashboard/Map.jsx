@@ -101,7 +101,7 @@ const Map = () => {
         (position) => {
           const coords = {
             lat: position.coords.latitude,
-            lon: position.coords.longitude,
+            lng: position.coords.longitude,
           };
           setCurrentLocation(coords);
         },
@@ -109,7 +109,7 @@ const Map = () => {
           console.error('Geolocation error:', error);
           setError('Unable to get your location');
           // Default to a location (e.g., San Francisco)
-          setCurrentLocation({ lat: 37.7749, lon: -122.4194 });
+          setCurrentLocation({ lat: 37.7749, lng: -122.4194 });
         }
       );
     }
@@ -125,7 +125,7 @@ const Map = () => {
         await api.post('/map/update-location', {
           coordinates: {
             lat: currentLocation.lat,
-            lng: currentLocation.lon,
+            lng: currentLocation.lng,
           },
         });
 
@@ -133,7 +133,7 @@ const Map = () => {
         const res = await api.post('/map/nearby-friends', {
           coordinates: {
             lat: currentLocation.lat,
-            lng: currentLocation.lon,
+            lng: currentLocation.lng,
           },
           radius: 3000, // 3 km
         });
@@ -152,7 +152,7 @@ const Map = () => {
 
   // Handle map click for destination
   const handleMapClick = (latlng) => {
-    setDestination({ lat: latlng.lat, lon: latlng.lng });
+    setDestination({ lat: latlng.lat, lng: latlng.lng });
     setRoutes([]);
     setSelectedRoute(null);
     setNearbyFriends([]);
@@ -171,6 +171,17 @@ const Map = () => {
     setError('');
 
     try {
+      // Client-side validation to avoid sending malformed coordinates
+      if (!currentLocation || typeof currentLocation.lat !== 'number' || typeof currentLocation.lng !== 'number') {
+        setError('Invalid origin coordinates. Please allow location access and try again.');
+        setLoading(false);
+        return;
+      }
+      if (!destination || typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+        setError('Invalid destination coordinates. Please click on the map to set a destination.');
+        setLoading(false);
+        return;
+      }
       const response = await api.post('/map/calculate-route', {
         origin: currentLocation,
         destination: destination,
@@ -186,7 +197,7 @@ const Map = () => {
       const friendsResponse = await api.post('/map/nearby-friends', {
         coordinates: {
           lat: destination.lat,
-          lng: destination.lon,
+          lng: destination.lng,
         },
         radius: 5000,
       });
@@ -272,46 +283,48 @@ const Map = () => {
           </div>
         </div>
 
-        {/* Route Options */}
+        {/* Route Options with Scrollbar */}
         {routes.length > 0 && (
           <div className="mt-4">
             <h3 className="font-medium text-gray-700 mb-2">
               Available Routes:
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              {routes.map((route, index) => (
-                <div
-                  key={index}
-                  onClick={() => setSelectedRoute(index)}
-                  className={`p-3 border-2 rounded cursor-pointer ${
-                    selectedRoute === index
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-medium">Route {index + 1}</span>
-                    <span
-                      className="px-2 py-1 rounded text-xs font-medium text-white"
-                      style={{
-                        backgroundColor: getRouteColor(route.safetyScore),
-                      }}
-                    >
-                      Safety: {Math.round(route.safetyScore)}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <div>
-                      Distance:{' '}
-                      {(route.lengthInMeters / 1000).toFixed(2)} km
+            <div className="max-h-64 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {routes.map((route, index) => (
+                  <div
+                    key={index}
+                    onClick={() => setSelectedRoute(index)}
+                    className={`p-3 border-2 rounded cursor-pointer transition-all ${
+                      selectedRoute === index
+                        ? 'border-blue-500 bg-blue-50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">Route {index + 1}</span>
+                      <span
+                        className="px-2 py-1 rounded text-xs font-medium text-white"
+                        style={{
+                          backgroundColor: getRouteColor(route.safetyScore),
+                        }}
+                      >
+                        Safety: {Math.round(route.safetyScore)}
+                      </span>
                     </div>
-                    <div>
-                      Time:{' '}
-                      {Math.round(route.travelTimeInSeconds / 60)} min
+                    <div className="text-sm text-gray-600">
+                      <div>
+                        Distance:{' '}
+                        {(route.lengthInMeters / 1000).toFixed(2)} km
+                      </div>
+                      <div>
+                        Time:{' '}
+                        {Math.round(route.travelTimeInSeconds / 60)} min
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -351,7 +364,7 @@ const Map = () => {
       {/* Map */}
       <div className="flex-1 relative">
         <MapContainer
-          center={[currentLocation.lat, currentLocation.lon]}
+          center={[currentLocation.lat, currentLocation.lng]}
           zoom={15}
           style={{ height: '100%', width: '100%' }}
         >
@@ -366,7 +379,7 @@ const Map = () => {
           {/* Current Location Marker */}
           {currentLocation && (
             <Marker
-              position={[currentLocation.lat, currentLocation.lon]}
+              position={[currentLocation.lat, currentLocation.lng]}
               icon={currentLocationIcon}
             >
               <Popup>Your Location</Popup>
@@ -394,7 +407,7 @@ const Map = () => {
           {/* Destination Marker */}
           {destination && (
             <Marker
-              position={[destination.lat, destination.lon]}
+              position={[destination.lat, destination.lng]}
               icon={destinationIcon}
             >
               <Popup>Destination</Popup>
@@ -411,8 +424,15 @@ const Map = () => {
                 key={index}
                 positions={coordinates}
                 color={getRouteColor(route.safetyScore)}
-                weight={isSelected ? 5 : 3}
-                opacity={isSelected ? 1 : 0.5}
+                weight={isSelected ? 6 : 2}
+                opacity={isSelected ? 1 : 0.4}
+                dashArray={isSelected ? 'none' : '5, 5'}
+                lineCap="round"
+                lineJoin="round"
+                className="cursor-pointer"
+                eventHandlers={{
+                  click: () => setSelectedRoute(index),
+                }}
               />
             ) : null;
           })}

@@ -1,3 +1,6 @@
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
 const TomTomCacheSchema = new Schema({
   snapshotAt: { type: Date, default: Date.now, index: true },
   // geometry (Point/Line) bounding or segment id

@@ -15,6 +15,12 @@ router.post('/calculate-route', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Origin is required' });
     }
 
+    // Basic validation/logging to help diagnose bad client payloads
+    console.debug('Calculate-route payload', { origin, destination, preferences });
+    if (typeof origin.lat !== 'number' || typeof origin.lng !== 'number') {
+      return res.status(400).json({ error: 'Origin coordinates must be numeric { lat, lng }' });
+    }
+
     // If no destination provided, handle exploration mode
     if (!destination && preferences.purpose) {
       try {
@@ -30,6 +36,10 @@ router.post('/calculate-route', authMiddleware, async (req, res) => {
 
     if (!destination) {
       return res.status(400).json({ error: 'Destination is required when not in exploration mode' });
+    }
+
+    if (typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+      return res.status(400).json({ error: 'Destination coordinates must be numeric { lat, lng }' });
     }
 
     const routes = await RouteService.calculateSafeRoute(origin, destination, preferences);

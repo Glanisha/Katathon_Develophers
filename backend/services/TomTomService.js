@@ -11,21 +11,44 @@ class TomTomService {
     const { routeType = 'shortest', avoid = [], maxAlternatives = 3 } = options;
     
     try {
-      const response = await axios.get(`${this.baseUrl}/routing/1/calculateRoute/${origin.lat},${origin.lng}:${destination.lat},${destination.lng}/json`, {
-        params: {
-          key: this.apiKey,
-          routeType: routeType,
-          avoid: avoid.join(','),
-          maxAlternatives: maxAlternatives,
-          travelMode: 'pedestrian',
-          hilliness: 'low',
-          windingness: 'low',
-          instructionsType: 'text'
-        }
-      });
+      // validate inputs
+      if (!origin || typeof origin.lat !== 'number' || typeof origin.lng !== 'number') {
+        throw new Error('Invalid origin coordinates');
+      }
+      if (!destination || typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+        throw new Error('Invalid destination coordinates');
+      }
+
+      // validate routeType against known allowed values. TomTom rejects unknown routeType strings.
+      const allowedRouteTypes = ['shortest', 'fastest'];
+      const providedRt = String(routeType || '').toLowerCase();
+      const finalRouteType = allowedRouteTypes.includes(providedRt) ? providedRt : 'shortest';
+
+      // helpful debug log (will appear in server logs)
+      console.debug('TomTom calculateRoute request', { origin, destination, options: { routeType: finalRouteType, avoid, maxAlternatives } });
+      // Build params and only include `avoid` when provided (TomTom rejects empty arrays)
+      const params = {
+        key: this.apiKey,
+        routeType: finalRouteType,
+        maxAlternatives: Number(maxAlternatives) || 3,
+        travelMode: 'pedestrian',
+        instructionsType: 'text'
+      };
+
+      // TomTom rejects hilliness/windingness for pedestrian routing with all cost models.
+      // Do not include these params for pedestrian mode.
+
+      if (Array.isArray(avoid) && avoid.length > 0) {
+        params.avoid = avoid.join(',');
+      }
+
+      const response = await axios.get(`${this.baseUrl}/routing/1/calculateRoute/${origin.lat},${origin.lng}:${destination.lat},${destination.lng}/json`, { params });
       return response.data;
     } catch (error) {
-      throw new Error(`TomTom routing error: ${error.message}`);
+      // include TomTom response body if available for easier debugging
+      const details = error.response?.data ? `: ${JSON.stringify(error.response.data)}` : '';
+      console.error('TomTom routing error', error.response?.status, error.response?.data || error.message);
+      throw new Error(`TomTom routing error: ${error.message}${details}`);
     }
   }
 

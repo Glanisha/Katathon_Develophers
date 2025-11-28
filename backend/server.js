@@ -8,6 +8,7 @@ const authRoutes = require('./routes/AuthRoutes');
 const mapRoutes = require('./routes/MapRoutes');
 const FriendsRoutes = require("./routes/FriendsRoutes");
 const LocationRoutes = require("./routes/LocationRoutes");
+const ReportsRoutes = require("./routes/ReportsRoutes");
 
 
 
@@ -31,6 +32,8 @@ app.use('/api/map', mapRoutes);
 //friend and location routes
 app.use("/api/friends", FriendsRoutes);
 app.use("/api/location", LocationRoutes);
+// reports
+app.use('/api/reports', ReportsRoutes);
 
 
 // Start the server

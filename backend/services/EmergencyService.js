@@ -1,13 +1,15 @@
 const EmergencyContact = require('../models/EmergencyContact');
-const twilio = require('twilio');
 
-const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM = process.env.TWILIO_FROM_NUMBER;
+// Simplified: no Twilio for now — return preview with body + contact phones so client uses device SMS
+const DEFAULT_COUNTRY_CODE = process.env.DEFAULT_COUNTRY_CODE || '91';
 
-let twilioClient = null;
-if (TWILIO_SID && TWILIO_TOKEN) {
-  twilioClient = twilio(TWILIO_SID, TWILIO_TOKEN);
+function normalizePhoneNumber(raw) {
+  if (!raw) return raw;
+  let s = String(raw).trim();
+  s = s.replace(/[\s()+-]+/g, '');
+  if (s.startsWith('+')) return s;
+  s = s.replace(/^0+/, '');
+  return `+${DEFAULT_COUNTRY_CODE}${s}`;
 }
 
 class EmergencyService {
@@ -24,55 +26,38 @@ class EmergencyService {
     return EmergencyContact.findOneAndDelete({ _id: contactId, userId });
   }
 
-  // sendAlert(user, { reason, location, batteryLevel, settings })
+  // sendAlert now returns preview data only (client will send SMS via device)
   async sendAlert(user, payload = {}) {
-    const contacts = await EmergencyContact.find({ userId: user._id }).limit(5);
+    const debug = ['[EmergencyService] sendAlert called (preview mode)'];
+    const contacts = await EmergencyContact.find({ userId: user._id }).limit(10);
+    debug.push(`[EmergencyService] contacts found: ${contacts.length}`);
+
     if (!contacts || contacts.length === 0) {
+      debug.push('[EmergencyService] no contacts configured');
       throw new Error('No emergency contacts configured');
     }
 
     const reason = payload.reason || 'manual';
     const loc = payload.location;
     const battery = payload.batteryLevel;
-    const settings = payload.settings || {};
-    const fromName = user.profile?.displayName || user.name || 'Contact';
+    const fromName = (user && (user.profile?.displayName || user.name)) || 'Contact';
 
     let mapLink = '';
     if (loc && loc.latitude != null && loc.longitude != null) {
       mapLink = `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`;
+      debug.push(`[EmergencyService] mapLink: ${mapLink}`);
+    } else {
+      debug.push('[EmergencyService] no valid location provided');
     }
 
-    const body = `${fromName} sent an emergency alert (${reason}).${battery ? ` Battery:${battery}% .` : ''} ${mapLink ? `Location: ${mapLink}` : ''}`;
+    const body = `${fromName} sent an emergency alert (${reason}).${battery ? ` Battery:${battery}% .` : ''} ${mapLink ? `Location: ${mapLink}` : ''}`.trim();
+    debug.push(`[EmergencyService] message body prepared (length ${body.length})`);
 
-    if (!twilioClient) {
-      // Dev fallback: return preview
-      return { preview: true, to: contacts.map(c => c.phone), body };
-    }
+    const to = contacts.map(c => normalizePhoneNumber(c.phone)).filter(Boolean);
+    debug.push(`[EmergencyService] normalized recipients: ${JSON.stringify(to)}`);
 
-    const results = [];
-    for (const c of contacts.slice(0, 5)) {
-      try {
-        const sms = await twilioClient.messages.create({
-          body,
-          from: TWILIO_FROM,
-          to: c.phone
-        });
-
-        if (settings.allowCalls) {
-          await twilioClient.calls.create({
-            to: c.phone,
-            from: TWILIO_FROM,
-            twiml: `<Response><Say>Emergency alert from ${fromName}. Check your messages for details.</Say></Response>`
-          });
-        }
-
-        results.push({ to: c.phone, sid: sms.sid, status: 'sent' });
-      } catch (err) {
-        results.push({ to: c.phone, error: err.message || err, status: 'failed' });
-      }
-    }
-
-    return { results, body };
+    // Return preview so frontend can open device SMS composer
+    return { preview: true, to, body, debug };
   }
 }
 

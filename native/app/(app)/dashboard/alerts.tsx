@@ -16,6 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../../src/api/api';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
+import * as Linking from 'expo-linking';
+import * as SMS from 'expo-sms';
 
 export default function Alerts() {
   const [contacts, setContacts] = useState<any[]>([]);
@@ -107,25 +109,72 @@ export default function Alerts() {
   const sendImmediateAlert = async (reason = 'manual') => {
     setLoading(true);
     try {
-      // include current location and battery level if available
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation }).catch(() => null);
       const batteryLevel = Platform.OS ? await Battery.getBatteryLevelAsync().catch(() => null) : null;
 
       const payload = {
-        reason, // 'manual' | 'battery_low' | 'accident' | 'unsafe_path'
+        reason,
         location: loc ? { latitude: loc.coords.latitude, longitude: loc.coords.longitude } : undefined,
         batteryLevel: batteryLevel != null ? Math.round((batteryLevel as number) * 100) : undefined,
         settings
       };
 
-      await api.post('/emergency/alert', payload);
-      Alert.alert('Alert sent', 'Emergency contacts notified');
-    } catch (err) {
-      console.error('Send alert error:', err);
-      Alert.alert('Error',   'Failed to send alert');
+      console.log('[Alerts] sendImmediateAlert payload:', payload);
+      const resp = await api.post('/emergency-contacts/alert', payload);
+      console.log('[Alerts] sendImmediateAlert response:', resp?.data);
+
+      // If backend returned preview info, open device SMS composer with recipients + body
+      const data = resp?.data || {};
+      const body = data.body || data.result?.body || (data.result && data.result.body) || '';
+      const recipients = data.to || data.result?.to || (data.result?.results ? data.result.results.map((r: any) => r.to) : []);
+      if (data.preview || data.result?.preview) {
+        // Prompt user then open SMS composer
+        sendDeviceFallback(recipients, body || 'Emergency alert');
+        return;
+      }
+
+      Alert.alert('Alert sent', 'Emergency contacts notified (see console/backend for details).');
+    } catch (err: any) {
+      console.error('[Alerts] Send alert error:', err, err?.response?.data);
+      const serverMsg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to send alert';
+      Alert.alert('Error sending alert', String(serverMsg));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Open device dialer for a single number
+  const openDialer = (phone: string) => {
+    const url = `tel:${phone}`;
+    Linking.openURL(url).catch(err => console.warn('Dialer open error', err));
+  };
+
+  // Open device SMS composer for multiple recipients (composer UI)
+  const openSmsComposer = async (phones: string[], body: string) => {
+    // Try expo-sms first (opens composer)
+    try {
+      const isAvailable = await SMS.isAvailableAsync();
+      if (isAvailable) {
+        await SMS.sendSMSAsync(phones, body);
+        return;
+      }
+    } catch (e) {
+      console.warn('expo-sms error', e);
+    }
+
+    // Fallback to linking with comma-separated recipients
+    const recipients = phones.join(',');
+    const url = `sms:${recipients}${Platform.OS === 'ios' ? '&' : '?'}body=${encodeURIComponent(body)}`;
+    Linking.openURL(url).catch(err => console.warn('SMS open error', err));
+  };
+
+  // Example use when Twilio fails: call this from sendImmediateAlert catch block
+  const sendDeviceFallback = async (numbers: string[], message: string) => {
+    // optional: show confirm dialog before opening SMS composer
+    Alert.alert('Send via device', `Open SMS composer to send to ${numbers.length} contacts?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open', onPress: () => openSmsComposer(numbers, message) }
+    ]);
   };
 
   // UI helpers to toggle settings

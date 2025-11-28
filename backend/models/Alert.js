@@ -1,9 +1,13 @@
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
 const AlertSchema = new Schema({
-  user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  type: { type: String, required: true }, // 'entered_low_safety', 'nearby_incident', ...
+  user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+  type: { type: String, required: true }, // e.g., 'entered_low_safety'
   payload: Schema.Types.Mixed,
-  channel: { type: String, enum: ['push','sms','email','whatsapp'] },
+  channel: { type: String, enum: ["push", "sms", "email", "whatsapp"] },
   sentAt: { type: Date, default: Date.now },
   read: { type: Boolean, default: false }
 });
-module.exports = mongoose.model('Alert', AlertSchema);
+
+module.exports = mongoose.model("Alert", AlertSchema);

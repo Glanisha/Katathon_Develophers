@@ -24,9 +24,26 @@ export default function DashboardHome() {
 
   const loadUser = async () => {
     try {
+      // load cached user first so UI is responsive
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsed = JSON.parse(userData);
+        setUser(parsed);
+        console.log('Loaded cached user, points:', parsed?.points);
+      }
+
+      // try to get freshest profile from backend (token must be set on api client)
+      try {
+        // try common endpoints; adjust if your backend uses a different route
+        const resp = await api.get('/auth/me').catch(() => api.get('/users/me'));
+        const fresh = resp?.data?.user ?? resp?.data;
+        if (fresh) {
+          setUser(fresh);
+          await AsyncStorage.setItem('user', JSON.stringify(fresh));
+          console.log('Fetched fresh user, points:', fresh?.points);
+        }
+      } catch (apiErr) {
+        console.warn('Could not fetch fresh profile (still using cached):',  apiErr);
       }
     } catch (error) {
       console.error('Failed to load user:', error);

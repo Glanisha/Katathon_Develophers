@@ -45,8 +45,8 @@ export default function Report() {
     getCurrentLocation();
   }, []);
 
-  const USE_HARDCODED_LOCATION = true; // set to false to use device location again
-  const HARDCODED_LOCATION = { latitude: 19.088, longitude: 72.865 }; // example Mumbai coords (not your place)
+  const USE_HARDCODED_LOCATION = false; // set to false to use device location again
+  const HARDCODED_LOCATION = { latitude:  20.1962, longitude: 72.8075 }; // example Mumbai coords (not your place)
 
   const getCurrentLocation = async () => {
     try {

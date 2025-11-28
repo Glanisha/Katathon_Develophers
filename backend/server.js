@@ -4,8 +4,11 @@ const bodyParser = require('body-parser');
 const databaseConfig = require('./config/database');
 require('dotenv').config();  
 const cors = require('cors'); 
+
 const authRoutes = require('./routes/AuthRoutes');
 const mapRoutes = require('./routes/MapRoutes');
+const emergencyContactRoutes = require('./routes/emergencyContacts');
+const alertRoutes = require('./routes/AlertRoute');   // ⭐ Add this
 const FriendsRoutes = require("./routes/FriendsRoutes");
 const LocationRoutes = require("./routes/LocationRoutes");
 const ReportsRoutes = require("./routes/ReportsRoutes");
@@ -23,12 +26,16 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Database connection
+// Connect DB
 databaseConfig();
 
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/map', mapRoutes);
+app.use('/api/emergency', emergencyContactRoutes);
+app.use('/api/alert', alertRoutes);   // ⭐ Add this
 
+// Start Server
 //friend and location routes
 app.use("/api/friends", FriendsRoutes);
 app.use("/api/location", LocationRoutes);
@@ -38,5 +45,5 @@ app.use('/api/reports', ReportsRoutes);
 
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });

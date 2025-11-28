@@ -1,14 +1,22 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Friends from "./pages/Friends";
 
 
-// Dashboard layout and page components
-import DashboardLayout, { DashboardHome,Reports, SettingsPage } from './pages/Dashboard/Dashboard';
+// Dashboard layout and pages
+import DashboardLayout, { 
+  DashboardHome, 
+  Friends, 
+  Reports, 
+  SettingsPage, 
+  EmergencyContacts   // ✅ NEW IMPORT
+} from './pages/Dashboard/Dashboard';
+
 import MapComponent from './pages/Dashboard/Map';
 
 // Protected Route Component
@@ -31,11 +39,13 @@ const App = () => {
     <Router>
       <AuthProvider>
         <Routes>
+
+          {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
-          {/* Dashboard routes handled here so Dashboard is purely a layout */}
+          {/* Dashboard - HOME */}
           <Route
             path="/dashboard"
             element={
@@ -46,6 +56,8 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Dashboard - MAP */}
           <Route
             path="/dashboard/map"
             element={
@@ -56,6 +68,8 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Dashboard - FRIENDS */}
           <Route
             path="/dashboard/friends"
             element={
@@ -66,6 +80,8 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Dashboard - REPORTS */}
           <Route
             path="/dashboard/reports"
             element={
@@ -76,6 +92,20 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Dashboard - EMERGENCY CONTACTS (NEW) */}
+          <Route
+            path="/dashboard/emergency"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <EmergencyContacts />   {/* ✅ Correct placement */}
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Dashboard - SETTINGS */}
           <Route
             path="/dashboard/settings"
             element={
@@ -87,6 +117,7 @@ const App = () => {
             }
           />
 
+          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>

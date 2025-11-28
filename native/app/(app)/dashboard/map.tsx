@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions, Modal } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions, Modal, Image  } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Picker } from '@react-native-picker/picker';
 import api from '../../../src/api/api';
 import { WebView } from 'react-native-webview';
 
 const { width, height } = Dimensions.get('window');
-
+ 
 interface Coordinates {
   latitude: number;
   longitude: number;
@@ -31,6 +31,7 @@ interface Route {
 
 const MapScreen = () => {
   const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
   const [destination, setDestination] = useState<Coordinates | null>(null);
   // New: allow manual source or device location as source
   const [useDeviceAsSource, setUseDeviceAsSource] = useState<boolean>(true); // default = device
@@ -64,7 +65,7 @@ const MapScreen = () => {
 
   useEffect(() => {
     getCurrentLocation();
-    loadIncidents(); // Add this
+    loadIncidents();
     return () => {
       if (watchIdRef.current) {
         watchIdRef.current.remove();
@@ -72,10 +73,27 @@ const MapScreen = () => {
     };
   }, []);
 
+  // Reload incidents every 10 seconds so they stay fresh on the map
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadIncidents();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const loadIncidents = async () => {
     try {
       const response = await api.get('/incidents/all');
-      setIncidents(response.data.incidents || []);
+      console.log('loadIncidents response:', response?.data?.incidents?.length ?? 0);
+      const incoming = response.data.incidents || [];
+      // normalize location shape and types (defensive)
+      const normalized = incoming.map((it: any) => {
+        const loc = it.location || {};
+        const lat = parseFloat((loc.latitude ?? loc.lat ?? '').toString()) || undefined;
+        const lng = parseFloat((loc.longitude ?? loc.lon ?? loc.lng ?? '').toString()) || undefined;
+        return { ...it, location: lat != null && lng != null ? { latitude: lat, longitude: lng } : it.location };
+      });
+      setIncidents(normalized);
     } catch (error) {
       console.error('Load incidents error:', error);
     }
@@ -390,9 +408,9 @@ const MapScreen = () => {
     }
   };
 
-  const routeCoordinates = selectedRoute ? 
+  const routeCoordinates = selectedRoute ?
     selectedRoute.legs.flatMap(leg => leg.points) : [];
-
+ 
   // Determine whether a route is the SV Road (Bandra→Kandivali) route.
   // Simple heuristic: majority of route points fall within an SV Road bounding box.
   const isSVRoadRoute = (route: Route | null): boolean => {
@@ -533,29 +551,74 @@ const MapScreen = () => {
         )}
 
         {/* Incident Markers - Heatmap Style */}
-        {incidents.map((incident, index) => (
+        {incidents.map((incident, index) => {
+          // defensive: ensure we have numeric coords
+          const lat = incident?.location?.latitude ?? incident?.location?.lat;
+          const lng = incident?.location?.longitude ?? incident?.location?.lon ?? incident?.location?.lng;
+          if (lat == null || lng == null) {
+            console.warn('Skipping incident with missing location:', incident);
+            return null;
+          }
+          const coord = { latitude: Number(lat), longitude: Number(lng) };
+
+          return (
           <Marker
-            key={`incident-${index}`}
-            coordinate={{
-              latitude: incident.location.latitude,
-              longitude: incident.location.longitude
-            }}
+            key={incident._id ?? `incident-${index}`}
+            coordinate={coord}
             title={incident.title}
             description={incident.description}
             pinColor={getSeverityColor(incident.severity)}
-            onPress={() => {
-              Alert.alert(
-                incident.title,
-                `${incident.description}\n\nSeverity: ${incident.severity.toUpperCase()}\nReported by: ${incident.user.name || 'Anonymous'}`,
-                [
-                  { text: 'Verify', onPress: () => verifyIncident(incident._id) },
-                  { text: 'Close', style: 'cancel' }
-                ]
-              );
-            }}
-          />
-        ))}
+            zIndex={100}
+            tracksViewChanges={false}
+            onPress={() => setSelectedIncident(incident)}
+          >
+            {/* keep marker simple; open modal onPress to show full incident card */}
+          </Marker>
+          );
+        })}
       </MapView>
+
+      {/* Incident detail modal (opens when marker pressed) */}
+      <Modal
+        visible={!!selectedIncident}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedIncident(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          {selectedIncident && (
+            <View style={{ width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 10 }}>
+              {selectedIncident.imageUrl ? (
+                <Image source={{ uri: selectedIncident.imageUrl }} style={{ width: '100%', height: 180, resizeMode: 'cover' }} />
+              ) : null}
+              <View style={{ padding: 12 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 6 }}>{selectedIncident.title}</Text>
+                <Text style={{ color: '#444', marginBottom: 8 }}>{selectedIncident.description}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <Text style={{ fontSize: 13, color: '#666' }}>Category: {selectedIncident.category}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: getSeverityColor(selectedIncident.severity) }}>
+                    {selectedIncident.severity?.toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={async () => { await verifyIncident(selectedIncident._id); setSelectedIncident(null); }}
+                    style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#34C759', borderRadius: 8 }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Verify</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSelectedIncident(null)}
+                    style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#ddd', borderRadius: 8 }}
+                  >
+                    <Text style={{ color: '#333', fontWeight: '700' }}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
 
       {/* Small helper: destination selection */}
       <View style={styles.destinationHint}>

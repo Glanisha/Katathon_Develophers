@@ -163,7 +163,7 @@ export default function DashboardHome() {
 
           <TouchableOpacity 
             style={styles.linkCard}
-            onPress={() => router.push('/(app)/dashboard/settings')}
+            onPress={() => router.push('/(app)/dashboard/friends')}
           >
             <View style={styles.linkIcon}>
               <Ionicons name="location-outline" size={22} color="#18181b" />

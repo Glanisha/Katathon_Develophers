@@ -45,8 +45,16 @@ export default function Report() {
     getCurrentLocation();
   }, []);
 
+  const USE_HARDCODED_LOCATION = true; // set to false to use device location again
+  const HARDCODED_LOCATION = { latitude: 19.088, longitude: 72.865 }; // example Mumbai coords (not your place)
+
   const getCurrentLocation = async () => {
     try {
+      if (USE_HARDCODED_LOCATION) {
+        setLocation(HARDCODED_LOCATION);
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission denied', 'Location permission required for incident reporting');

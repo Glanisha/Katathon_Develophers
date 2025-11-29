@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../../src/api/api';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
+import { Accelerometer } from 'expo-sensors';
 import * as Linking from 'expo-linking';
 import * as SMS from 'expo-sms';
 
@@ -33,10 +34,16 @@ export default function Alerts() {
     allowCalls: false
   });
   const [modalVisible, setModalVisible] = useState(false);
+  const [impactDetectionActive, setImpactDetectionActive] = useState(false);
+  const [lastImpactAlert, setLastImpactAlert] = useState<number>(0);
 
   useEffect(() => {
     loadContacts();
     loadSettings();
+    setupImpactDetection();
+    return () => {
+      Accelerometer.removeAllListeners();
+    };
   }, []);
 
   const loadContacts = async () => {
@@ -123,17 +130,35 @@ export default function Alerts() {
       const resp = await api.post('/emergency-contacts/alert', payload);
       console.log('[Alerts] sendImmediateAlert response:', resp?.data);
 
-      // If backend returned preview info, open device SMS composer with recipients + body
       const data = resp?.data || {};
-      const body = data.body || data.result?.body || (data.result && data.result.body) || '';
-      const recipients = data.to || data.result?.to || (data.result?.results ? data.result.results.map((r: any) => r.to) : []);
+      
+      // Handle real Twilio response (not preview mode)
+      if (data.success) {
+        const sent = data.sentCount || 0;
+        const failed = data.failedCount || 0;
+        const total = sent + failed;
+        
+        if (sent > 0) {
+          Alert.alert(
+            'Alert Sent', 
+            `Emergency alert sent to ${sent} of ${total} contacts.${failed > 0 ? ` ${failed} failed.` : ''}`
+          );
+        } else {
+          Alert.alert('Alert Failed', `Failed to send alert to any contacts. Check phone numbers and try again.`);
+        }
+        return;
+      }
+
+      // Fallback: if still preview mode, open device SMS composer
+      const body = data.body || data.result?.body || '';
+      const recipients = data.to || data.result?.to || [];
       if (data.preview || data.result?.preview) {
-        // Prompt user then open SMS composer
         sendDeviceFallback(recipients, body || 'Emergency alert');
         return;
       }
 
-      Alert.alert('Alert sent', 'Emergency contacts notified (see console/backend for details).');
+      // Default success message
+      Alert.alert('Alert sent', 'Emergency contacts have been notified.');
     } catch (err: any) {
       console.error('[Alerts] Send alert error:', err, err?.response?.data);
       const serverMsg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Failed to send alert';
@@ -177,15 +202,77 @@ export default function Alerts() {
     ]);
   };
 
+  // Auto-trigger alerts based on conditions
+  const checkAndSendAutoAlert = async (trigger: string, data?: any) => {
+    // Check if user has enabled this trigger
+    if (
+      (trigger === 'lowBattery' && !settings.sendOnLowBattery) ||
+      (trigger === 'accident' && !settings.sendOnAccidentDetected) ||
+      (trigger === 'unsafeRoute' && !settings.sendOnUnsafePath)
+    ) {
+      console.log(`[Alerts] Auto-alert trigger ${trigger} disabled in settings`);
+      return;
+    }
+
+    console.log(`[Alerts] Auto-sending alert for trigger: ${trigger}`);
+    try {
+      await sendImmediateAlert(trigger);
+    } catch (err) {
+      console.error(`[Alerts] Auto-alert failed for ${trigger}:`, err);
+    }
+  };
+
+  // Export this function so other screens can call it
+  // You can call this from map.tsx when conditions are detected
+  // Example: checkAndSendAutoAlert('lowBattery', { batteryLevel: 15 });
+
   // UI helpers to toggle settings
   const toggleSetting = async (key: keyof typeof settings) => {
     const next = { ...settings, [key]: !settings[key] };
     await saveSettings(next);
   };
 
+  const setupImpactDetection = () => {
+    // Very sensitive threshold for testing (normal walking ~1-2, hard shake ~8-15)
+    const IMPACT_THRESHOLD = 3.5; // Low threshold for easy testing
+    const COOLDOWN_MS = 10000; // 10 seconds between alerts
+    
+    Accelerometer.setUpdateInterval(100); // Check every 100ms
+    
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
+      // Calculate total acceleration magnitude
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+      
+      // Check for impact (sudden acceleration spike)
+      if (magnitude > IMPACT_THRESHOLD) {
+        const now = Date.now();
+        
+        // Respect cooldown to avoid spam
+        if (now - lastImpactAlert > COOLDOWN_MS && settings.sendOnAccidentDetected) {
+          console.log(`[Alerts] Impact detected! Magnitude: ${magnitude.toFixed(2)}, threshold: ${IMPACT_THRESHOLD}`);
+          setLastImpactAlert(now);
+          
+          // Send alert immediately without confirmation
+          console.log(`[Alerts] Auto-sending emergency alert due to impact (${magnitude.toFixed(1)}g)`);
+          sendImmediateAlert('accident');
+        }
+      }
+    });
+    
+    setImpactDetectionActive(true);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Emergency Contacts</Text>
+
+      {/* Impact detection status */}
+      <View style={[styles.settings, { marginBottom: 8 }]}>
+        <Text style={styles.settingsTitle}>Impact Detection Status</Text>
+        <Text style={{ color: impactDetectionActive ? '#34C759' : '#FF3B30' }}>
+          {impactDetectionActive ? '✅ Active (threshold: 3.5g - shake phone to test)' : '❌ Inactive'}
+        </Text>
+      </View>
 
       <View style={styles.settings}>
         <Text style={styles.settingsTitle}>Alert triggers</Text>
@@ -285,3 +372,24 @@ const styles = StyleSheet.create({
   modalTitle: { fontWeight: '700', fontSize: 16, marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 10, marginBottom: 10 }
 });
+
+// In map.tsx or other components
+export const triggerAutoAlert = async (reason: string) => {
+  try {
+    const loc = await Location.getCurrentPositionAsync().catch(() => null);
+    const batteryLevel = Platform.OS ? await Battery.getBatteryLevelAsync().catch(() => null) : null;
+    
+    await api.post('/emergency-contacts/alert', {
+      reason,
+      location: loc ? { latitude: loc.coords.latitude, longitude: loc.coords.longitude } : undefined,
+      batteryLevel: batteryLevel != null ? Math.round(batteryLevel * 100) : undefined
+    });
+  } catch (err) {
+    console.error('Auto-alert failed:', err);
+  }
+};
+
+// Call when conditions detected:
+// triggerAutoAlert('lowBattery');
+// triggerAutoAlert('accident');
+// triggerAutoAlert('unsafeRoute');

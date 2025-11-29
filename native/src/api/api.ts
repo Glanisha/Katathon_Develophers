@@ -1,8 +1,7 @@
 
 import axios from 'axios';
 
-// const YOUR_LOCAL_IP = '192.168.0.101';
-const YOUR_LOCAL_IP = '10.131.143.65' 
+const YOUR_LOCAL_IP = '10.16.72.65' 
 const BACKEND_PORT = 5000; 
 
 const BASE_URL = `http://${YOUR_LOCAL_IP}:${BACKEND_PORT}/api`; 

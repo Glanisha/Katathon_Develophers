@@ -10,6 +10,7 @@ const friendsRoutes = require('./routes/FriendsRoutes');
 const incidentRoutes = require('./routes/IncidentRoutes');
 const emergencyRoutes = require('./routes/EmergencyRoutes');
 const lightingRoute = require("./routes/LightingReportRoute");
+const chatRoutes = require('./routes/ChatRoutes');
 
 
 
@@ -30,6 +31,7 @@ app.use('/api/friends', friendsRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/emergency-contacts', emergencyRoutes);
 app.use("/", lightingRoute);
+app.use('/api/chats', chatRoutes);
 
 
 // Start the server

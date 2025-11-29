@@ -10,10 +10,10 @@ import {
   FlatList,
   Image,
   Dimensions,
-  ActivityIndicator,
   ScrollView,
   RefreshControl,
-  Linking
+  Linking,
+  ActivityIndicator
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -83,12 +83,16 @@ export default function Friends() {
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [messageModalVisible, setMessageModalVisible] = useState(false);
   const [message, setMessage] = useState('');
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const mapRef = useRef<MapView>(null);
   const chatScrollRef = useRef<ScrollView>(null);
+
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+
 
   useEffect(() => {
     getCurrentLocation();
@@ -261,29 +265,6 @@ export default function Friends() {
     }
   };
 
-  const sendMessage = async () => {
-    if (!message.trim() || !selectedFriend) return;
-
-    const chatMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
-      friendId: selectedFriend._id,
-      sender: 'user',
-      text: message,
-      timestamp: Date.now(),
-    };
-
-    try {
-      await saveChatMessage(selectedFriend._id, chatMsg);
-      setMessage('');
-      // Auto-scroll to bottom
-      setTimeout(() => {
-        chatScrollRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to send message');
-    }
-  };
-
   const callFriend = async () => {
     if (!selectedFriend?.phone) {
       Alert.alert('Error', 'Phone number not available');
@@ -306,6 +287,108 @@ export default function Friends() {
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       });
+    }
+  };
+
+  // ONLY REPLACE THESE TWO FUNCTIONS - everything else stays the same
+
+  useEffect(() => {
+    if (selectedFriend) {
+      openOrCreateChat(selectedFriend);
+    } else {
+      setCurrentChatId(null);
+      setChatHistory([]);
+    }
+  }, [selectedFriend]);
+
+  const openOrCreateChat = async (friend: Friend) => {
+    setChatLoading(true);
+    try {
+      const listResp = await api.get('/chats');
+      const chats: any[] = listResp.data.chats || [];
+
+      let chat = chats.find((c) =>
+        Array.isArray(c.participants) &&
+        c.participants.some((p: any) => String(p.userId) === String(friend._id))
+      );
+
+      if (!chat) {
+        const createResp = await api.post('/chats', {
+          participants: [{ userId: friend._id, name: friend.displayName || friend.name }],
+          context: { friendId: friend._id }
+        });
+        chat = createResp.data.chat;
+      }
+
+      if (chat) {
+        setCurrentChatId(chat._id);
+        const msgs = (chat.messages || []).map((m: any) => ({
+          id: m._id || `msg_${new Date(m.createdAt).getTime()}`,
+          friendId: friend._id,
+          sender: m.sender === 'user' ? 'user' : 'friend',
+          text: m.text,
+          timestamp: new Date(m.createdAt).getTime()
+        }));
+        setChatHistory(msgs);
+      } else {
+        setChatHistory([]);
+      }
+    } catch (err: any) {
+      console.error('openOrCreateChat error', err);
+      setChatHistory([]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!message.trim() || !selectedFriend) return;
+
+    const msgText = message.trim();
+    setMessage('');
+    setLoading(true);
+
+    try {
+      let chatId = currentChatId;
+      if (!chatId) {
+        const createResp = await api.post('/chats', {
+          participants: [{ userId: selectedFriend._id, name: selectedFriend.displayName || selectedFriend.name }],
+          context: { friendId: selectedFriend._id }
+        });
+        chatId = createResp.data.chat._id;
+        setCurrentChatId(chatId);
+      }
+
+      const optimistic: ChatMessage = {
+        id: `temp_${Date.now()}`,
+        friendId: selectedFriend._id,
+        sender: 'user',
+        text: msgText,
+        timestamp: Date.now()
+      };
+      setChatHistory(prev => [...prev, optimistic]);
+
+      const resp = await api.post(`/chats/${chatId}/message`, {
+        text: msgText,
+        generateReply: false
+      });
+
+      const serverChat = resp.data.chat;
+      const msgs = (serverChat.messages || []).map((m: any) => ({
+        id: m._id || `msg_${new Date(m.createdAt).getTime()}`,
+        friendId: selectedFriend._id,
+        sender: m.sender === 'user' ? 'user' : 'friend',
+        text: m.text,
+        timestamp: new Date(m.createdAt).getTime()
+      }));
+      setChatHistory(msgs);
+
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (err: any) {
+      console.error('Send message error:', err);
+      setChatHistory(prev => prev.filter(m => !m.id.startsWith('temp_')));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -563,7 +646,7 @@ export default function Friends() {
       {activeTab === 'requests' && <RequestsTab />}
       {activeTab === 'discover' && <DiscoverTab />}
 
-      {/* Message Modal with Chat History */}
+      {/* Message Modal - UPDATE THIS SECTION */}
       <Modal
         visible={messageModalVisible}
         transparent
@@ -581,56 +664,73 @@ export default function Friends() {
               </TouchableOpacity>
             </View>
 
-            {selectedFriend?.phone && (
-              <TouchableOpacity
-                style={styles.phoneButton}
-                onPress={callFriend}
-              >
-                <Text style={styles.phoneButtonText}>📱 Call: {selectedFriend.phone}</Text>
-              </TouchableOpacity>
-            )}
+            {/* ADD LOADING STATE */}
+            {chatLoading ? (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={{ marginTop: 10, color: '#666' }}>Loading chat...</Text>
+              </View>
+            ) : (
+              <>
+                {selectedFriend?.phone && (
+                  <TouchableOpacity style={styles.phoneButton} onPress={callFriend}>
+                    <Text style={styles.phoneButtonText}>📱 Call: {selectedFriend.phone}</Text>
+                  </TouchableOpacity>
+                )}
 
-            <ScrollView
-              ref={chatScrollRef}
-              style={styles.chatHistory}
-              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
-            >
-              {chatHistory.length === 0 ? (
-                <Text style={styles.emptyChat}>Start a conversation...</Text>
-              ) : (
-                chatHistory.map((msg) => (
-                  <View
-                    key={msg.id}
-                    style={[
-                      styles.chatBubble,
-                      msg.sender === 'user' ? styles.userBubble : styles.friendBubble
-                    ]}
+                <ScrollView
+                  ref={chatScrollRef}
+                  style={styles.chatHistory}
+                  onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+                >
+                  {chatHistory.length === 0 ? (
+                    <Text style={styles.emptyChat}>Start a conversation...</Text>
+                  ) : (
+                    chatHistory.map((msg) => (
+                      <View
+                        key={msg.id}
+                        style={[
+                          styles.chatBubble,
+                          msg.sender === 'user' ? styles.userBubble : styles.friendBubble
+                        ]}
+                      >
+                        <Text 
+                          style={[
+                            styles.chatText, 
+                            msg.sender === 'user' ? { color: '#fff' } : { color: '#000' }
+                          ]}
+                        >
+                          {msg.text}
+                        </Text>
+                        <Text style={styles.chatTime}>
+                          {new Date(msg.timestamp).toLocaleTimeString()}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.messageInput}
+                    placeholder="Type a message..."
+                    value={message}
+                    onChangeText={setMessage}
+                    multiline
+                    maxLength={500}
+                  />
+                  <TouchableOpacity
+                    style={[styles.sendButton, loading && { opacity: 0.5 }]}
+                    onPress={sendMessage}
+                    disabled={loading || !message.trim()}
                   >
-                    <Text style={styles.chatText}>{msg.text}</Text>
-                    <Text style={styles.chatTime}>
-                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    <Text style={styles.sendButtonText}>
+                      {loading ? '...' : 'Send'}
                     </Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Type a message..."
-                value={message}
-                onChangeText={setMessage}
-                multiline
-                numberOfLines={3}
-              />
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={sendMessage}
-              >
-                <Text style={styles.sendButtonText}>Send</Text>
-              </TouchableOpacity>
-            </View>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>

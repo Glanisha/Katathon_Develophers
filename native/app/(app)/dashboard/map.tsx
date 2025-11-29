@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions, Modal, Image  } from 'react-native';
+import { View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, ScrollView, Dimensions, Modal, Image, Animated } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Picker } from '@react-native-picker/picker';
@@ -41,6 +41,8 @@ interface Route {
   }>;
 }
 
+const AnimatedPolyline = Animated.createAnimatedComponent(Polyline);
+
 const MapScreen = () => {
   const [currentLocation, setCurrentLocation] = useState<Coordinates | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
@@ -62,6 +64,7 @@ const MapScreen = () => {
   const [showExperienceModal, setShowExperienceModal] = useState(false);
   const [experienceIndex, setExperienceIndex] = useState(0);
   const [incidents, setIncidents] = useState<any[]>([]);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const mapRef = useRef<MapView>(null);
   const watchIdRef = useRef<Location.LocationSubscription | null>(null);
@@ -458,7 +461,36 @@ const MapScreen = () => {
   const prevExperience = () => setExperienceIndex(i => Math.max(0, i - 1));
   const nextExperience = () => setExperienceIndex(i => Math.min(mapillaryEmbeds.length - 1, i + 1));
 
-  
+  useEffect(() => {
+    if (!selectedRoute) return;
+
+    // Calculate pulse intensity based on safety score
+    // Lower safety = more dramatic pulse
+    const safetyScore = selectedRoute.safetyScore || 50;
+    const pulseIntensity = 1 - (safetyScore / 100); // 0 = very safe, 1 = very unsafe
+    const minScale = 1 - (pulseIntensity * 0.3); // scales down 0-30% based on safety
+    const maxScale = 1 + (pulseIntensity * 0.5); // scales up 0-50% based on safety
+    const duration = 1000 - (pulseIntensity * 400); // faster pulse for unsafe routes
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: maxScale,
+          duration: duration,
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: minScale,
+          duration: duration,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+
+    return () => {
+      pulseAnim.setValue(1);
+    };
+  }, [selectedRoute]);
 
   return (
     <View style={styles.container}>
@@ -553,13 +585,60 @@ const MapScreen = () => {
           />
         ))}
 
-        {/* Route polyline */}
-        {routeCoordinates.length > 0 && (
-          <Polyline
-            coordinates={routeCoordinates}
-            strokeColor="#007AFF"
-            strokeWidth={4}
-          />
+        {/* Static background polyline for better visibility */}
+        {routeCoordinates.length > 0 && selectedRoute && (
+          <>
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor="rgba(0, 0, 0, 0.2)"
+              strokeWidth={8}
+              zIndex={-1}
+            />
+
+            {/* Animated pulsing polyline based on safety score */}
+            <AnimatedPolyline
+              coordinates={routeCoordinates}
+              strokeColor={
+                selectedRoute.safetyScore >= 90 ? '#34C759' :  // Green for very safe
+                selectedRoute.safetyScore >= 70 ? '#007AFF' :  // Blue for moderately safe
+                selectedRoute.safetyScore >= 60 ? '#FF9500' :  // Orange for caution
+                '#FF3B30'                                       // Red for unsafe
+              }
+              strokeWidth={pulseAnim.interpolate({
+                inputRange: [0.7, 1.5],
+                outputRange: [3, 7],
+              })}
+            />
+
+            {/* Safety score indicator at route start */}
+            {routeCoordinates[0] && (
+              <Marker
+                coordinate={routeCoordinates[0]}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+              >
+                <View style={styles.safetyScoreBadge}>
+                  <Text style={styles.safetyScoreText}>
+                    {selectedRoute.safetyScore}
+                  </Text>
+                  <Text style={styles.safetyScoreLabel}>Safety</Text>
+                </View>
+              </Marker>
+            )}
+
+            {/* Safety score indicator at route end */}
+            {routeCoordinates[routeCoordinates.length - 1] && (
+              <Marker
+                coordinate={routeCoordinates[routeCoordinates.length - 1]}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+              >
+                <View style={[styles.safetyScoreBadge, { backgroundColor: '#34C759' }]}>
+                  <Text style={styles.safetyScoreText}>🎯</Text>
+                </View>
+              </Marker>
+            )}
+          </>
         )}
 
         {/* Incident Markers - Heatmap Style */}
@@ -1047,6 +1126,32 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  safetyScoreBadge: {
+    backgroundColor: 'rgba(0, 122, 255, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'white',
+    alignItems: 'center',
+    minWidth: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  safetyScoreText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  safetyScoreLabel: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });
 

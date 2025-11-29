@@ -1,4 +1,4 @@
-import React from 'react'
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
@@ -6,12 +6,14 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Friends from "./pages/Friends";
 
+// 🔹 NEW: chat section that will appear inside the Friends page
+import FriendsChatPage from "./pages/FriendsChatPage";
 
 // Dashboard layout and pages
-import DashboardLayout, { 
-  DashboardHome,  
-  Reports, 
-  SettingsPage, 
+import DashboardLayout, {
+  DashboardHome,
+  Reports,
+  SettingsPage,
   EmergencyContacts   // ✅ NEW IMPORT
 } from './pages/Dashboard/Dashboard';
 
@@ -67,13 +69,22 @@ const App = () => {
             }
           />
 
-          {/* Dashboard - FRIENDS */}
+          {/* Dashboard - FRIENDS (Friends list + Chat section) */}
           <Route
             path="/dashboard/friends"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <Friends />
+                  {/* 
+                    Friends component = your existing friend requests / list UI
+                    FriendsChatPage  = chat + call UI
+                    Wrapped in a flex column so both sections show nicely one below the other
+                  */}
+                  <div className="flex flex-col gap-4 h-full">
+                    <Friends />
+                    <FriendsChatPage />
+                    
+                  </div>
                 </DashboardLayout>
               </ProtectedRoute>
             }
@@ -97,7 +108,7 @@ const App = () => {
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <EmergencyContacts />   {/* ✅ Correct placement */}
+                  <EmergencyContacts />
                 </DashboardLayout>
               </ProtectedRoute>
             }

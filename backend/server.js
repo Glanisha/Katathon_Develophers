@@ -13,6 +13,8 @@ const FriendsRoutes = require("./routes/FriendsRoutes");
 const LocationRoutes = require("./routes/LocationRoutes");
 const ReportsRoutes = require("./routes/ReportsRoutes");
 const markerRoutes = require('./routes/MarkerRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+
 
 
 
@@ -42,6 +44,7 @@ app.use('/api/markers', markerRoutes);
 //friend and location routes
 app.use("/api/friends", FriendsRoutes);
 app.use("/api/location", LocationRoutes);
+app.use('/api/chats', chatRoutes);
 // reports
 app.use('/api/reports', ReportsRoutes);
 

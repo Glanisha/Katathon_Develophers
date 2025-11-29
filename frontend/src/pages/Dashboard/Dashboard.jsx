@@ -4,7 +4,9 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "../../components/
 import { useNavigate, useLocation } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import api from "../../../api";
+import { createMarker } from '../../api/markerApi';
 import MapComponent from "./Map";
+import TomTomMap from "../../components/TomTomMap";
 
 import {
   Sidebar,
@@ -176,6 +178,13 @@ export const Friends = () => (
 // -----------------------
 export const Reports = () => {
   const { user } = useAuth();
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportCategory, setReportCategory] = useState('Other');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportFile, setReportFile] = useState(null);
+  const [reportLocation, setReportLocation] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState('');
   const [activeTab, setActiveTab] = useState("weekly");
   const [weeklyReport, setWeeklyReport] = useState(null);
   const [dailyReport, setDailyReport] = useState(null);
@@ -210,235 +219,91 @@ export const Reports = () => {
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-6">Activity Reports</h2>
 
-      {/* Tab Navigation */}
-      <div className="flex gap-4 mb-6 border-b">
-        <button
-          onClick={() => setActiveTab("weekly")}
-          className={`pb-3 px-4 font-medium border-b-2 transition ${
-            activeTab === "weekly"
-              ? "border-blue-500 text-blue-600"
-              : "border-transparent text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Weekly Activity
-        </button>
-        <button
-          onClick={() => setActiveTab("daily")}
-          className={`pb-3 px-4 font-medium border-b-2 transition ${
-            activeTab === "daily"
-              ? "border-blue-500 text-blue-600"
-              : "border-transparent text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Daily Activity
-        </button>
+      {/* Report submission form + Community Reports Map (TomTom) */}
+      <div className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="col-span-1 bg-white p-4 rounded-lg border">
+          <h3 className="text-lg font-semibold">Report an Incident</h3>
+          <p className="text-sm text-gray-600 mb-3">Share a photo and details to help others stay safe.</p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Photo</label>
+              <input type="file" accept="image/*" onChange={(e)=>setReportFile(e.target.files[0])} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Incident Title</label>
+              <input value={reportTitle} onChange={(e)=>setReportTitle(e.target.value)} placeholder="eg. Suspicious person" className="w-full p-2 border rounded" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Category</label>
+              <select value={reportCategory} onChange={(e)=>setReportCategory(e.target.value)} className="w-full p-2 border rounded">
+                <option>Suspicious</option>
+                <option>Harassment</option>
+                <option>Accident</option>
+                <option>Danger</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea value={reportDescription} onChange={(e)=>setReportDescription(e.target.value)} rows={4} className="w-full p-2 border rounded" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Location</label>
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-gray-700">{reportLocation ? `${reportLocation.lat.toFixed(5)}, ${reportLocation.lng.toFixed(5)}` : 'No location set'}</div>
+                <button type="button" onClick={async ()=>{
+                  if (!navigator.geolocation) return alert('Geolocation not supported');
+                  navigator.geolocation.getCurrentPosition((pos)=>{
+                    setReportLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                  }, ()=>alert('Unable to get location'))
+                }} className="px-2 py-1 bg-blue-600 text-white rounded text-sm">Use current location</button>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button disabled={submitting} onClick={async()=>{
+                if (!reportTitle) return alert('Title required');
+                if (!reportLocation) return alert('Please set location');
+                setSubmitting(true); setSubmitMessage('');
+                try {
+                  const formData = new FormData();
+                  formData.append('title', reportTitle);
+                  formData.append('description', reportDescription);
+                  formData.append('category', reportCategory);
+                  formData.append('lat', reportLocation.lat);
+                  formData.append('lng', reportLocation.lng);
+                  if (reportFile) formData.append('image', reportFile);
+
+                  // use backend marker API
+                  const res = await createMarker(formData);
+                  setSubmitMessage('Report submitted');
+                  // reset form
+                  setReportTitle(''); setReportCategory('Other'); setReportDescription(''); setReportFile(null);
+                } catch (err) {
+                  console.error('Submit report err', err);
+                  setSubmitMessage('Failed to submit');
+                } finally { setSubmitting(false); }
+              }} className="px-4 py-2 bg-green-600 text-white rounded">{submitting ? 'Submitting...' : 'Submit'}</button>
+            </div>
+
+            {submitMessage && <div className="text-sm text-gray-700">{submitMessage}</div>}
+          </div>
+        </div>
+
+        <div className="col-span-2 bg-white p-2 rounded-lg border">
+          <h3 className="text-lg font-medium mb-2">Community Reports Map</h3>
+          <div className="w-full h-96 rounded-lg overflow-hidden border">
+            <TomTomMap apiKey={import.meta.env.VITE_TOMTOM_API_KEY} />
+          </div>
+        </div>
       </div>
 
-      {loading && (
-        <div className="text-center py-8 text-gray-600">Loading report...</div>
-      )}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-
-      {/* Weekly Report */}
-      {activeTab === "weekly" && weeklyReport && !loading && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Total Sessions</p>
-              <p className="text-3xl font-bold text-blue-600">
-                {weeklyReport.totalSessions || 0}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Total Duration</p>
-              <p className="text-3xl font-bold text-green-600">
-                {Math.round((weeklyReport.totalDurationSeconds || 0) / 3600)}h
-              </p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Total Distance</p>
-              <p className="text-3xl font-bold text-purple-600">
-                {((weeklyReport.totalDistanceMeters || 0) / 1000).toFixed(1)} km
-              </p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Avg Safety Score</p>
-              <p className="text-3xl font-bold text-orange-600">
-                {weeklyReport.avgSafetyScore
-                  ? Math.round(weeklyReport.avgSafetyScore)
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-
-          {weeklyReport.topPlaces && weeklyReport.topPlaces.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-3">Most Visited Places</h3>
-              <div className="space-y-2">
-                {weeklyReport.topPlaces.slice(0, 5).map((place, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center"
-                  >
-                    <span className="text-gray-700">
-                      {idx + 1}.{" "}
-                      {place.name ||
-                        `Location (${place.lat?.toFixed(3)}, ${place.lng?.toFixed(
-                          3
-                        )})`}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      {place.count} visits
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {weeklyReport.sessions && weeklyReport.sessions.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-3">Session Breakdown</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {weeklyReport.sessions.map((session, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white p-3 rounded border border-gray-200"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-sm">
-                          {new Date(session.createdAt).toLocaleDateString()}{" "}
-                          {new Date(session.createdAt).toLocaleTimeString()}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Duration:{" "}
-                          {Math.round(session.durationSeconds / 60)} min |
-                          Distance:{" "}
-                          {(session.distanceMeters / 1000).toFixed(2)} km
-                        </p>
-                      </div>
-                      {session.safetyScore && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                          Safety: {Math.round(session.safetyScore)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Daily Report */}
-      {activeTab === "daily" && dailyReport && !loading && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Today's Sessions</p>
-              <p className="text-3xl font-bold text-blue-600">
-                {dailyReport.totalSessions || 0}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Today's Duration</p>
-              <p className="text-3xl font-bold text-green-600">
-                {Math.round((dailyReport.totalDurationSeconds || 0) / 60)} min
-              </p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Today's Distance</p>
-              <p className="text-3xl font-bold text-purple-600">
-                {((dailyReport.totalDistanceMeters || 0) / 1000).toFixed(2)} km
-              </p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Avg Safety Score</p>
-              <p className="text-3xl font-bold text-orange-600">
-                {dailyReport.avgSafetyScore
-                  ? Math.round(dailyReport.avgSafetyScore)
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-
-          {dailyReport.topPlaces && dailyReport.topPlaces.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-3">Today's Visited Places</h3>
-              <div className="space-y-2">
-                {dailyReport.topPlaces.map((place, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center"
-                  >
-                    <span className="text-gray-700">
-                      {idx + 1}.{" "}
-                      {place.name ||
-                        `Location (${place.lat?.toFixed(3)}, ${place.lng?.toFixed(
-                          3
-                        )})`}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      {place.count} visits
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {dailyReport.sessions && dailyReport.sessions.length > 0 && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-3">Today's Sessions</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {dailyReport.sessions.map((session, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white p-3 rounded border border-gray-200"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-sm">
-                          {new Date(session.createdAt).toLocaleTimeString()}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Duration:{" "}
-                          {Math.round(session.durationSeconds / 60)} min |
-                          Distance:{" "}
-                          {(session.distanceMeters / 1000).toFixed(2)} km
-                        </p>
-                      </div>
-                      {session.safetyScore && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                          Safety: {Math.round(session.safetyScore)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {dailyReport.totalSessions === 0 && (
-            <div className="text-center py-8 text-gray-600">
-              No walks recorded today. Start your first walk to see activity!
-            </div>
-          )}
-        </div>
-      )}
-
-      {!loading && !weeklyReport && !dailyReport && (
-        <div className="text-center py-8 text-gray-600">
-          No data available yet. Start your first walk to see reports!
-        </div>
-      )}
+      {/* Weekly/Daily activity sections removed per user request */}
     </div>
   );
 };

@@ -128,7 +128,7 @@ const BASE_URL = `http://${YOUR_LOCAL_IP}:${BACKEND_PORT}/api`
 To use deployed backend
 
 ```js
-// const BASE_URL = "https://safewalk-3sv0.onrender.com/api"
+const BASE_URL = "https://safewalk-3sv0.onrender.com/api"
 ```
 
 ---

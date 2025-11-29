@@ -94,7 +94,7 @@ https://safewalk-3sv0.onrender.com/
 1. Navigate to app directory
 
 ```
-cd app
+cd native
 ```
 
 2. Create `.env` with the following
@@ -115,7 +115,7 @@ expo start
 
 ## Backend Selection Inside App
 
-Location: `app/api/api.js`
+Location: `native/src/api/api.js`
 
 For local development
 

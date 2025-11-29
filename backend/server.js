@@ -12,6 +12,8 @@ const alertRoutes = require('./routes/AlertRoute');   // ⭐ Add this
 const FriendsRoutes = require("./routes/FriendsRoutes");
 const LocationRoutes = require("./routes/LocationRoutes");
 const ReportsRoutes = require("./routes/ReportsRoutes");
+const markerRoutes = require('./routes/MarkerRoutes');
+
 
 
 
@@ -34,6 +36,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/map', mapRoutes);
 app.use('/api/emergency', emergencyContactRoutes);
 app.use('/api/alert', alertRoutes);   // ⭐ Add this
+app.use('/api/markers', markerRoutes);
 
 // Start Server
 //friend and location routes

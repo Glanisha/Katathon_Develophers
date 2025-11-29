@@ -13,6 +13,17 @@ interface Coordinates {
   longitude: number;
 }
 
+interface PredictiveSafety {
+  predictionTimestamp: string;
+  now: number;            // 0..100 safety score (higher = safer)
+  in30Min: number;
+  after22: number;
+  timeSeries?: Array<{ offsetMinutes: number; score: number }>;
+  explanation?: string;
+  rawSignals?: any;
+}
+
+
 interface Route {
   id: string;
   safetyScore: number;
@@ -21,6 +32,7 @@ interface Route {
   walkabilityScore: number;
   suggestions?: any;
   commentary?: string;
+  predictiveSafety?: PredictiveSafety; // <-- added
   legs: Array<{
     points: Array<{
       latitude: number;
@@ -789,19 +801,27 @@ const MapScreen = () => {
         <ScrollView style={styles.routeContainer}>
           <Text style={styles.title}>Route Options</Text>
           {routes.map((route, index) => (
-            <View
-              key={index}
-              style={[
-                styles.routeCard,
-                selectedRoute === route && styles.selectedRouteCard
-              ]}
-            >
+            <View key={index} style={[styles.routeCard, selectedRoute === route && styles.selectedRouteCard]}>
               <TouchableOpacity onPress={() => selectRoute(route)}>
                 <Text style={styles.routeTitle}>Route {index + 1}</Text>
                 <Text style={styles.routeInfo}>Distance: {(route.lengthInMeters / 1000).toFixed(1)} km</Text>
                 <Text style={styles.routeInfo}>Duration: {Math.round(route.travelTimeInSeconds / 60)} min</Text>
                 <Text style={styles.routeInfo}>Safety Score: {route.safetyScore}/100</Text>
                 {route.walkabilityScore && <Text style={styles.routeInfo}>Walkability: {route.walkabilityScore}/100</Text>}
+                
+                {/* New: Predictive Safety display */}
+                {route.predictiveSafety && (
+                  <View style={{ marginTop: 8, padding: 8, backgroundColor: '#fff', borderRadius: 6 }}>
+                    <Text style={{ fontWeight: '700' }}>Predictive Safety</Text>
+                    <Text>Now: {route.predictiveSafety.now}/100</Text>
+                    <Text>In 30 min: {route.predictiveSafety.in30Min}/100</Text>
+                    <Text>After 22:00: {route.predictiveSafety.after22}/100</Text>
+                    {/* {route.predictiveSafety.explanation && (
+                      <Text style={{ color: '#666', marginTop: 6, fontSize: 12 }}>{route.predictiveSafety.explanation}</Text>
+                    )} */}
+                  </View>
+                )}
+
                 {route.commentary && <Text style={styles.commentary}>{route.commentary}</Text>}
               </TouchableOpacity>
 

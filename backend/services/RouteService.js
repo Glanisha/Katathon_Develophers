@@ -3,6 +3,7 @@ const LightingReport = require('../models/LightingReport');
 const SavedRoute = require('../models/SavedRoutes');
 const TomTomService = require('./TomTomService');
 const GeminiService = require('./GeminiService');
+const PredictiveService = require('./PredictiveService');
 
 class RouteService {
   // Calculate safety score for a segment
@@ -73,8 +74,6 @@ class RouteService {
     };
   }
 
- // ...existing code...
-
   async calculateSafeRoute(origin, destination, preferences = {}) {
     const { routeType = 'safest', purpose } = preferences;
 
@@ -109,7 +108,25 @@ class RouteService {
         };
       });
 
-      return scoredRoutes;
+      // Enrich with predictive safety data
+      const detailedRoutes = [];
+      for (const r of scoredRoutes) {
+        const detailed = { ...r };
+        let predictiveSafety = null;
+        try {
+          predictiveSafety = await PredictiveService.predictRouteRisk(r, {
+            origin,
+            destination,
+            timestamp: preferences?.timestamp
+          });
+        } catch (psErr) {
+          console.warn('PredictiveService failed:', psErr?.message || psErr);
+          predictiveSafety = null;
+        }
+        detailedRoutes.push({ ...detailed, predictiveSafety });
+      }
+
+      return detailedRoutes;
     } catch (error) {
       console.error('Route calculation error:', error.message);
       throw error;
@@ -122,8 +139,6 @@ class RouteService {
     if (safetyScore >= 60) return '⚠ Use caution on this route';
     return '⚠ High-risk route; consider alternatives';
   }
-
-// ...existing code...
 
   // Save selected route to database
   async saveRoute(userId, routeData, preferences = {}) {
@@ -231,7 +246,7 @@ class RouteService {
     return segment;
   }
 
- // ...existing code...
+  // ...existing code...
 
   getBoundingBox(coordinates) {
     if (!coordinates || coordinates.length === 0) {
@@ -258,7 +273,6 @@ class RouteService {
     return { minLat, maxLat, minLon, maxLon };
   }
 
-// ...existing code...
 }
 
 module.exports = new RouteService();

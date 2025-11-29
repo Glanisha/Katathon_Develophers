@@ -22,6 +22,8 @@ export default function DashboardHome() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   // translation state
   const [locale, setLocale] = useState<string>('en');
   const [translations, setTranslations] = useState<Record<string, string>>({});
@@ -31,6 +33,7 @@ export default function DashboardHome() {
   useEffect(() => {
     loadUser();
     loadLocale();
+    loadLeaderboard();
   }, []);
 
   const loadLocale = async () => {
@@ -74,9 +77,24 @@ export default function DashboardHome() {
     }
   };
 
+  const loadLeaderboard = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await api.get('/map/leaderboard?period=month');
+      setLeaderboardData(response.data);
+      console.log('Leaderboard data:', response.data);
+    } catch (error) {
+      console.warn('Failed to load leaderboard:', error);
+      setLeaderboardData(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadUser();
+    await loadLeaderboard();
     setRefreshing(false);
   };
 
@@ -91,15 +109,38 @@ export default function DashboardHome() {
     }
   };
 
+  // Helper to get display values with fallbacks
+  const getStatValue = (key: string) => {
+    if (statsLoading) return '...';
+    if (!leaderboardData?.currentUser) return '0';
+    
+    switch (key) {
+      case 'totalWalks':
+        return leaderboardData.currentUser.totalWalks.toString();
+      case 'avgSafetyScore':
+        return leaderboardData.currentUser.avgSafetyScore > 0 
+          ? leaderboardData.currentUser.avgSafetyScore.toString() 
+          : '--';
+      case 'friendsCount':
+        return leaderboardData.friendsCount.toString();
+      default:
+        return '0';
+    }
+  };
+
   const UI_STRINGS: Record<string, string> = {
     welcomeBack: 'Welcome back,',
     userNameFallback: 'User',
     yourPoints: 'Your Points',
+    monthlyLeaderboard: 'Monthly Leaderboard',
+    youAreRanked: "You're ranked",
+    ofFriends: 'of friends',
+    walks: 'walks',
     startWalkingTitle: 'Start Walking',
     startWalkingDesc: 'Find the safest route to your destination',
     yourStats: 'Your Stats',
     totalWalks: 'Total Walks',
-    safetyScore: 'Safety Score',
+    safetyScore: 'Avg Safety',
     friends: 'Friends',
     quickLinks: 'Quick Links',
     addFriends: 'Add Friends',
@@ -173,6 +214,46 @@ export default function DashboardHome() {
            </View>
          </View>
 
+         {/* Monthly Leaderboard Card */}
+         {leaderboardData && leaderboardData.leaderboard.length > 0 && (
+           <View style={styles.leaderboardCard}>
+             <View style={styles.leaderboardHeader}>
+               <Text style={styles.leaderboardTitle}>{translations.monthlyLeaderboard || 'Monthly Leaderboard'}</Text>
+               <Text style={styles.leaderboardSubtitle}>
+                 {translations.youAreRanked || "You're"} #{leaderboardData.currentUser.rank} {translations.ofFriends || 'of'} {'3'}
+               </Text>
+             </View>
+             <View style={styles.leaderboardList}>
+               {leaderboardData.leaderboard.slice(0, 3).map((person: any, index: number) => (
+                 <View key={person.userId} style={[styles.leaderboardItem, person.isCurrentUser && styles.currentUserItem]}>
+                   <View style={[styles.leaderboardRank, person.rank === 1 && styles.firstPlaceRank]}>
+                     <Text style={[styles.rankText, person.rank === 1 && styles.firstPlaceText]}>#{person.rank}</Text>
+                   </View>
+                   <View style={styles.leaderboardInfo}>
+                     <Text style={[styles.leaderboardName, person.isCurrentUser && { fontWeight: '700', color: '#007AFF' }]}>
+                       {person.isCurrentUser ? 'You' : person.name}
+                     </Text>
+                     <Text style={styles.leaderboardStats}>
+                       {person.totalWalks} {translations.walks || 'walks'} • {person.totalDistanceKm}km
+                     </Text>
+                   </View>
+                   {person.rank === 1 && <Text style={styles.crownEmoji}>👑</Text>}
+                   {person.rank === 2 && <Text style={styles.medalEmoji}>🥈</Text>}
+                   {person.rank === 3 && <Text style={styles.medalEmoji}>🥉</Text>}
+                 </View>
+               ))}
+             </View>
+             
+             {/* View All Button */}
+             {leaderboardData.leaderboard.length > 3 && (
+               <TouchableOpacity style={styles.viewAllButton} onPress={() => {/* Navigate to full leaderboard */}}>
+                 <Text style={styles.viewAllText}>View All ({leaderboardData.leaderboard.length})</Text>
+                 <Ionicons name="chevron-forward" size={16} color="#007AFF" />
+               </TouchableOpacity>
+             )}
+           </View>
+         )}
+
          {/* Quick Actions */}
          <View style={styles.quickActions}>
            <TouchableOpacity 
@@ -199,21 +280,21 @@ export default function DashboardHome() {
                <View style={styles.statIcon}>
                  <Ionicons name="footsteps-outline" size={20} color="#18181b" />
                </View>
-               <Text style={styles.statValue}>0</Text>
+               <Text style={styles.statValue}>{getStatValue('totalWalks')}</Text>
               <Text style={styles.statLabel}>{translations.totalWalks || 'Total Walks'}</Text>
              </View>
              <View style={styles.statCard}>
                <View style={styles.statIcon}>
                  <Ionicons name="shield-checkmark-outline" size={20} color="#18181b" />
                </View>
-               <Text style={styles.statValue}>--</Text>
-              <Text style={styles.statLabel}>{translations.safetyScore || 'Safety Score'}</Text>
+               <Text style={styles.statValue}>{getStatValue('avgSafetyScore')}</Text>
+              <Text style={styles.statLabel}>{translations.safetyScore || 'Avg Safety'}</Text>
              </View>
              <View style={styles.statCard}>
                <View style={styles.statIcon}>
                  <Ionicons name="people-outline" size={20} color="#18181b" />
                </View>
-               <Text style={styles.statValue}>{user?.friends?.length || 0}</Text>
+               <Text style={styles.statValue}>{getStatValue('friendsCount')}</Text>
               <Text style={styles.statLabel}>{translations.friends || 'Friends'}</Text>
              </View>
            </View>
@@ -347,20 +428,97 @@ const styles = StyleSheet.create({
     borderColor: '#FFD700'
   },
   pointsLeft: {
-    flex: 1
+    flex: 1,
   },
   pointsLabel: {
     fontSize: 14,
-    color: '#71717a',
-    marginBottom: 4
+    color: '#B8860B',
+    marginBottom: 4,
   },
   pointsValue: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
-    color: '#FFD700'
+    color: '#B8860B',
   },
   pointsRight: {
-    marginLeft: 16
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaderboardCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  leaderboardHeader: {
+    marginBottom: 16,
+  },
+  leaderboardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#18181b',
+    marginBottom: 4,
+  },
+  leaderboardSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  leaderboardList: {
+    gap: 12,
+  },
+  leaderboardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  currentUserItem: {
+    borderColor: '#007AFF',
+    backgroundColor: '#f0f8ff',
+  },
+  leaderboardRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  firstPlaceRank: {
+    backgroundColor: '#fef3c7',
+  },
+  rankText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  firstPlaceText: {
+    color: '#d97706',
+  },
+  leaderboardInfo: {
+    flex: 1,
+  },
+  leaderboardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#18181b',
+    marginBottom: 2,
+  },
+  leaderboardStats: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  crownEmoji: {
+    fontSize: 18,
+  },
+  medalEmoji: {
+    fontSize: 16,
   },
   quickActions: {
     marginBottom: 32,
@@ -473,5 +631,17 @@ const styles = StyleSheet.create({
   linkDesc: {
     fontSize: 13,
     color: '#71717a',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  viewAllText: {
+    color: '#007AFF',
+    fontWeight: '600',
+    marginRight: 4,
   },
 });

@@ -94,7 +94,7 @@ router.get('/weather/:lat/:lng', authMiddleware, async (req, res) => {
   }
 });
 
-// ...existing routes...
+// POST /api/map/nearby-friends
 router.post('/nearby-friends', authMiddleware, async (req, res) => {
   try {
     const { coordinates, radius } = req.body;
@@ -108,6 +108,7 @@ router.post('/nearby-friends', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /api/map/lighting-reports
 router.post('/lighting-reports', authMiddleware, async (req, res) => {
   try {
     const { coordinates, radius } = req.body;
@@ -120,6 +121,7 @@ router.post('/lighting-reports', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /api/map/report-lighting
 router.post('/report-lighting', authMiddleware, async (req, res) => {
   try {
     const { coordinates, luxEstimate, notes, photoUrl } = req.body;
@@ -141,6 +143,111 @@ router.post('/report-lighting', authMiddleware, async (req, res) => {
     res.status(201).json({ report });
   } catch (error) {
     console.error('Report lighting error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/map/leaderboard - Get user and friends stats
+router.get('/leaderboard', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { period = 'month' } = req.query; // week, month, all
+
+    // Calculate date filter based on period
+    let dateFilter = {};
+    if (period === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      dateFilter = { createdAt: { $gte: weekAgo } };
+    } else if (period === 'month') {
+      const monthAgo = new Date();
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      dateFilter = { createdAt: { $gte: monthAgo } };
+    }
+
+    // Get user's friends list
+    const Friends = require('../models/Friends');
+    const friendships = await Friends.find({
+      users: userId,
+      status: 'accepted'
+    }).populate('users', 'name email');
+
+    const friendIds = friendships.flatMap(f => 
+      f.users.filter(u => u._id.toString() !== userId.toString()).map(u => u._id)
+    );
+    friendIds.push(userId); // Include current user
+
+    // Aggregate route statistics
+    const SavedRoute = require('../models/SavedRoutes');
+    const stats = await SavedRoute.aggregate([
+      {
+        $match: {
+          user: { $in: friendIds },
+          status: { $in: ['completed', 'active'] },
+          ...dateFilter
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      {
+        $unwind: '$userInfo'
+      },
+      {
+        $group: {
+          _id: '$user',
+          name: { $first: '$userInfo.name' },
+          totalWalks: { $sum: 1 },
+          totalDistance: { $sum: { $ifNull: ['$routeData.lengthInMeters', 0] } },
+          totalTime: { $sum: { $ifNull: ['$routeData.travelTimeInSeconds', 0] } },
+          avgSafetyScore: { $avg: { $ifNull: ['$routeData.safetyScore', 0] } },
+          completedWalks: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'completed'] }, 1, 0]
+            }
+          }
+        }
+      },
+      {
+        $sort: { totalWalks: -1, totalDistance: -1 }
+      }
+    ]);
+
+    // Format leaderboard data
+    const leaderboard = stats.map((stat, index) => ({
+      rank: index + 1,
+      userId: stat._id,
+      name: stat.name,
+      totalWalks: stat.totalWalks,
+      totalDistanceKm: Math.round(stat.totalDistance / 1000 * 100) / 100,
+      totalTimeHours: Math.round(stat.totalTime / 3600 * 10) / 10,
+      avgSafetyScore: Math.round(stat.avgSafetyScore),
+      completedWalks: stat.completedWalks,
+      isCurrentUser: stat._id.toString() === userId.toString()
+    }));
+
+    // Get current user's specific stats
+    const currentUserStats = leaderboard.find(l => l.isCurrentUser) || {
+      rank: 0,
+      totalWalks: 0,
+      totalDistanceKm: 0,
+      avgSafetyScore: 0,
+      completedWalks: 0
+    };
+
+    res.json({
+      period,
+      currentUser: currentUserStats,
+      leaderboard,
+      friendsCount: friendIds.length - 1 // exclude current user
+    });
+  } catch (error) {
+    console.error('Leaderboard error:', error);
     res.status(500).json({ error: error.message });
   }
 });

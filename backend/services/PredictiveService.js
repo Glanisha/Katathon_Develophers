@@ -65,7 +65,23 @@ class PredictiveService {
         if (TomTomService && typeof TomTomService.getTrafficFlow === 'function') {
           const bbox = this._pointsToBbox(samplePoints);
           const traffic = bbox ? await TomTomService.getTrafficFlow(bbox) : null;
-          congestion = (TomTomService.calculateCongestionScore ? TomTomService.calculateCongestionScore(traffic) : (traffic?.score ?? 0)) || 0;
+          
+          // Get raw congestion value
+          const rawCongestion = (TomTomService.calculateCongestionScore ? TomTomService.calculateCongestionScore(traffic) : (traffic?.score ?? 0)) || 0;
+          
+          // Normalize congestion to 0-100 range if needed
+          if (rawCongestion <= 1) {
+            // If it's already normalized (0-1), convert to 0-100
+            congestion = Math.round(rawCongestion * 100);
+          } else if (rawCongestion <= 10) {
+            // If it's 0-10 scale, convert to 0-100
+            congestion = Math.round(rawCongestion * 10);
+          } else {
+            // Assume it's already 0-100 scale
+            congestion = Math.round(Math.min(100, Math.max(0, rawCongestion)));
+          }
+          
+          console.log(`PredictiveService: rawCongestion=${rawCongestion}, normalized=${congestion}`);
         }
         if (TomTomService && typeof TomTomService.getWeatherData === 'function') {
           const mid = samplePoints[Math.floor(samplePoints.length / 2)];
@@ -82,6 +98,7 @@ class PredictiveService {
 
       const baseRiskForHour = (h) => {
         const incidentFactor = hourScores[h] || 0;
+        // Fix: Use congestion as percentage (0-100) and normalize properly
         const congestionFactor = (congestion || 0) / 100;
         return Math.min(1, incidentFactor * 0.7 + congestionFactor * 0.25 + weatherPenalty * 0.2);
       };

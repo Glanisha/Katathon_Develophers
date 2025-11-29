@@ -205,10 +205,10 @@ export default function Alerts() {
           <Switch value={settings.sendOnUnsafePath} onValueChange={() => toggleSetting('sendOnUnsafePath')} />
         </View>
 
-        <View style={styles.row}>
+        {/* <View style={styles.row}>
           <Text>Allow outgoing calls (Twilio)</Text>
           <Switch value={settings.allowCalls} onValueChange={() => toggleSetting('allowCalls')} />
-        </View>
+        </View> */}
       </View>
 
       <View style={styles.actions}>

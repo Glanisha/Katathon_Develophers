@@ -1,0 +1,149 @@
+{
+  "name": "ElevenLabs Consultation Voice Agent",
+  "nodes": [
+    {
+      "id": "Telegram Trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      }
+    },
+    {
+      "id": "Extract Voice File",
+      "name": "Extract Voice File",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 200],
+      "parameters": {
+        "functionCode": "items[0].json.file_id = items[0].json.message.voice.file_id;\nreturn items;"
+      }
+    },
+    {
+      "id": "Download Audio",
+      "name": "Download Audio",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [700, 200],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": "={{$json.file_id}}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram"
+        }
+      }
+    },
+    {
+      "id": "Speech-To-Text (Whisper)",
+      "name": "Speech-To-Text (Whisper)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [950, 200],
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "model": "whisper-1",
+        "binaryPropertyName": "data"
+      },
+      "credentials": {
+        "openAIApi": {
+          "id": "YOUR_OPENAI_KEY_ID",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "id": "Consultation Prompt → LLM",
+      "name": "Consultation Prompt → LLM",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a consultation voice agent. Provide structured, knowledgeable answers and ask relevant follow-up questions."
+          },
+          {
+            "role": "user",
+            "content": "={{$json.text}}"
+          }
+        ],
+        "responsePropertyName": "ai_response"
+      },
+      "credentials": {
+        "openAIApi": {
+          "id": "YOUR_OPENAI_KEY_ID",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "id": "Convert To Speech (ElevenLabs)",
+      "name": "Convert To Speech (ElevenLabs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1450, 200],
+      "parameters": {
+        "url": "https://api.elevenlabs.io/v1/text-to-speech/<VOICE_ID>",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "responseFormat": "file",
+        "options": {
+          "bodyContentType": "json"
+        },
+        "jsonParameters": true,
+        "headerParametersJson": "{\"xi-api-key\":\"YOUR_11LABS_API_KEY\",\"Accept\":\"audio/mpeg\"}",
+        "bodyParametersJson": "{\"text\":\"={{$json.ai_response}}\",\"voice_settings\":{\"stability\":0.5,\"similarity_boost\":0.8}}"
+      }
+    },
+    {
+      "id": "Reply with Voice Message",
+      "name": "Reply with Voice Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1700, 200],
+      "parameters": {
+        "operation": "sendVoice",
+        "chatId": "={{$json.message.chat.id}}",
+        "additionalFields": {},
+        "binaryPropertyName": "data"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [["Extract Voice File"]]
+    },
+    "Extract Voice File": {
+      "main": [["Download Audio"]]
+    },
+    "Download Audio": {
+      "main": [["Speech-To-Text (Whisper)"]]
+    },
+    "Speech-To-Text (Whisper)": {
+      "main": [["Consultation Prompt → LLM"]]
+    },
+    "Consultation Prompt → LLM": {
+      "main": [["Convert To Speech (ElevenLabs)"]]
+    },
+    "Convert To Speech (ElevenLabs)": {
+      "main": [["Reply with Voice Message"]]
+    }
+  }
+}

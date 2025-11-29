@@ -7,20 +7,44 @@ import {
   StatusBar,
   ScrollView,
   RefreshControl,
+  Modal,
+  FlatList,
+  Pressable,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../../src/api/api';
+import translationService from '../../../src/services/translation';
 
 export default function DashboardHome() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // translation state
+  const [locale, setLocale] = useState<string>('en');
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     loadUser();
+    loadLocale();
   }, []);
+
+  const loadLocale = async () => {
+    try {
+      const l = await AsyncStorage.getItem('app_locale');
+      if (l) {
+        setLocale(l);
+        // pre-translate visible strings for the saved locale (if not english)
+        if (l !== 'en') await applyTranslations(l);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const loadUser = async () => {
     try {
@@ -67,6 +91,49 @@ export default function DashboardHome() {
     }
   };
 
+  const UI_STRINGS: Record<string, string> = {
+    welcomeBack: 'Welcome back,',
+    userNameFallback: 'User',
+    yourPoints: 'Your Points',
+    startWalkingTitle: 'Start Walking',
+    startWalkingDesc: 'Find the safest route to your destination',
+    yourStats: 'Your Stats',
+    totalWalks: 'Total Walks',
+    safetyScore: 'Safety Score',
+    friends: 'Friends',
+    quickLinks: 'Quick Links',
+    addFriends: 'Add Friends',
+    reportIncident: 'Report Incident',
+    locationSharing: 'Location Sharing'
+  };
+
+  const applyTranslations = async (targetLang: string) => {
+    if (targetLang === 'en') {
+      setTranslations({});
+      setLocale('en');
+      await AsyncStorage.setItem('app_locale', 'en');
+      return;
+    }
+    try {
+      setTranslating(true);
+      const translated = await translationService.translateStrings(UI_STRINGS, targetLang);
+      setTranslations(translated);
+      setLocale(targetLang);
+      await AsyncStorage.setItem('app_locale', targetLang);
+    } catch (e) {
+      console.warn('Translation failed', e);
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const LANGS = [
+    { code: 'en', label: 'English' },
+    { code: 'hi', label: 'हिन्दी (Hindi)' },
+    { code: 'es', label: 'Español (Spanish)' },
+    { code: 'fr', label: 'Français (French)' },
+  ];
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -81,121 +148,156 @@ export default function DashboardHome() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
+            <Text style={styles.greeting}>{translations.welcomeBack || 'Welcome back,'}</Text>
+            <Text style={styles.userName}>{user?.name || (translations.userNameFallback || 'User')}</Text>
           </View>
-          <TouchableOpacity style={styles.profileButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#71717a" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Points Card - Add This */}
-        <View style={styles.pointsCard}>
-          <View style={styles.pointsLeft}>
-            <Text style={styles.pointsLabel}>Your Points</Text>
-            <Text style={styles.pointsValue}>{user?.points || 0}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Translate button */}
+            <TouchableOpacity style={[styles.profileButton, { marginRight: 8 }]} onPress={() => setLangModalVisible(true)}>
+              <Ionicons name="language-outline" size={20} color="#71717a" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.profileButton} onPress={handleLogout}>
+               <Ionicons name="log-out-outline" size={24} color="#71717a" />
+            </TouchableOpacity>
           </View>
-          <View style={styles.pointsRight}>
-            <Ionicons name="star" size={40} color="#FFD700" />
-          </View>
-        </View>
+         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.primaryCard}
-            onPress={() => router.push('/(app)/dashboard/map')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.primaryCardIcon}>
-              <Ionicons name="navigate-outline" size={32} color="#ffffff" />
-            </View>
-            <View style={styles.primaryCardContent}>
-              <Text style={styles.primaryCardTitle}>Start Walking</Text>
-              <Text style={styles.primaryCardDesc}>Find the safest route to your destination</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+         {/* Points Card - Add This */}
+         <View style={styles.pointsCard}>
+           <View style={styles.pointsLeft}>
+            <Text style={styles.pointsLabel}>{translations.yourPoints || 'Your Points'}</Text>
+             <Text style={styles.pointsValue}>{user?.points || 0}</Text>
+           </View>
+           <View style={styles.pointsRight}>
+             <Ionicons name="star" size={40} color="#FFD700" />
+           </View>
+         </View>
 
-        {/* Stats */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Your Stats</Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={styles.statIcon}>
-                <Ionicons name="footsteps-outline" size={20} color="#18181b" />
-              </View>
-              <Text style={styles.statValue}>0</Text>
-              <Text style={styles.statLabel}>Total Walks</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={styles.statIcon}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#18181b" />
-              </View>
-              <Text style={styles.statValue}>--</Text>
-              <Text style={styles.statLabel}>Safety Score</Text>
-            </View>
-            <View style={styles.statCard}>
-              <View style={styles.statIcon}>
-                <Ionicons name="people-outline" size={20} color="#18181b" />
-              </View>
-              <Text style={styles.statValue}>{user?.friends?.length || 0}</Text>
-              <Text style={styles.statLabel}>Friends</Text>
-            </View>
-          </View>
-        </View>
+         {/* Quick Actions */}
+         <View style={styles.quickActions}>
+           <TouchableOpacity 
+             style={styles.primaryCard}
+             onPress={() => router.push('/(app)/dashboard/map')}
+             activeOpacity={0.8}
+           >
+             <View style={styles.primaryCardIcon}>
+               <Ionicons name="navigate-outline" size={32} color="#ffffff" />
+             </View>
+             <View style={styles.primaryCardContent}>
+              <Text style={styles.primaryCardTitle}>{translations.startWalkingTitle || 'Start Walking'}</Text>
+              <Text style={styles.primaryCardDesc}>{translations.startWalkingDesc || 'Find the safest route to your destination'}</Text>
+             </View>
+             <Ionicons name="chevron-forward" size={24} color="#ffffff" />
+           </TouchableOpacity>
+         </View>
 
-        {/* Quick Links */}
-        <View style={styles.quickLinksSection}>
-          <Text style={styles.sectionTitle}>Quick Links</Text>
-          
-          <TouchableOpacity 
-            style={styles.linkCard}
-            onPress={() => router.push('/(app)/dashboard/friends')}
-          >
-            <View style={styles.linkIcon}>
-              <Ionicons name="person-add-outline" size={22} color="#18181b" />
-            </View>
-            <View style={styles.linkContent}>
-              <Text style={styles.linkTitle}>Add Friends</Text>
+         {/* Stats */}
+         <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>{translations.yourStats || 'Your Stats'}</Text>
+           <View style={styles.statsRow}>
+             <View style={styles.statCard}>
+               <View style={styles.statIcon}>
+                 <Ionicons name="footsteps-outline" size={20} color="#18181b" />
+               </View>
+               <Text style={styles.statValue}>0</Text>
+              <Text style={styles.statLabel}>{translations.totalWalks || 'Total Walks'}</Text>
+             </View>
+             <View style={styles.statCard}>
+               <View style={styles.statIcon}>
+                 <Ionicons name="shield-checkmark-outline" size={20} color="#18181b" />
+               </View>
+               <Text style={styles.statValue}>--</Text>
+              <Text style={styles.statLabel}>{translations.safetyScore || 'Safety Score'}</Text>
+             </View>
+             <View style={styles.statCard}>
+               <View style={styles.statIcon}>
+                 <Ionicons name="people-outline" size={20} color="#18181b" />
+               </View>
+               <Text style={styles.statValue}>{user?.friends?.length || 0}</Text>
+              <Text style={styles.statLabel}>{translations.friends || 'Friends'}</Text>
+             </View>
+           </View>
+         </View>
+
+         {/* Quick Links */}
+         <View style={styles.quickLinksSection}>
+          <Text style={styles.sectionTitle}>{translations.quickLinks || 'Quick Links'}</Text>
+           
+           <TouchableOpacity 
+             style={styles.linkCard}
+             onPress={() => router.push('/(app)/dashboard/friends')}
+           >
+             <View style={styles.linkIcon}>
+               <Ionicons name="person-add-outline" size={22} color="#18181b" />
+             </View>
+             <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>{translations.addFriends || 'Add Friends'}</Text>
               <Text style={styles.linkDesc}>Connect with people you trust</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
-          </TouchableOpacity>
+             </View>
+             <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
+           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.linkCard}
-            onPress={() => router.push('/(app)/dashboard/report')}
-          >
-            <View style={styles.linkIcon}>
-              <Ionicons name="alert-circle-outline" size={22} color="#18181b" />
-            </View>
-            <View style={styles.linkContent}>
-              <Text style={styles.linkTitle}>Report Incident</Text>
+           <TouchableOpacity 
+             style={styles.linkCard}
+             onPress={() => router.push('/(app)/dashboard/report')}
+           >
+             <View style={styles.linkIcon}>
+               <Ionicons name="alert-circle-outline" size={22} color="#18181b" />
+             </View>
+             <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>{translations.reportIncident || 'Report Incident'}</Text>
               <Text style={styles.linkDesc}>Help keep community safe</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
-          </TouchableOpacity>
+             </View>
+             <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
+           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.linkCard}
-            onPress={() => router.push('/(app)/dashboard/friends')}
-          >
-            <View style={styles.linkIcon}>
-              <Ionicons name="location-outline" size={22} color="#18181b" />
-            </View>
-            <View style={styles.linkContent}>
-              <Text style={styles.linkTitle}>Location Sharing</Text>
+           <TouchableOpacity 
+             style={styles.linkCard}
+             onPress={() => router.push('/(app)/dashboard/friends')}
+           >
+             <View style={styles.linkIcon}>
+               <Ionicons name="location-outline" size={22} color="#18181b" />
+             </View>
+             <View style={styles.linkContent}>
+              <Text style={styles.linkTitle}>{translations.locationSharing || 'Location Sharing'}</Text>
               <Text style={styles.linkDesc}>Manage who can see your location</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
-          </TouchableOpacity>
+             </View>
+             <Ionicons name="chevron-forward" size={20} color="#a1a1aa" />
+           </TouchableOpacity>
+         </View>
+       </ScrollView>
+
+      {/* Language picker modal */}
+      <Modal visible={langModalVisible} transparent animationType="slide" onRequestClose={() => setLangModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center' }}>
+          <View style={{ margin: 20, backgroundColor: '#fff', borderRadius: 12, padding: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12 }}>Select language</Text>
+            {translating && <ActivityIndicator size="small" />}
+            <FlatList
+              data={LANGS}
+              keyExtractor={item => item.code}
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={async () => {
+                    setLangModalVisible(false);
+                    await applyTranslations(item.code);
+                  }}
+                  style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: '#eee' }}
+                >
+                  <Text style={{ fontSize: 15 }}>{item.label}</Text>
+                </Pressable>
+              )}
+            />
+            <TouchableOpacity onPress={() => { setLangModalVisible(false); }} style={{ marginTop: 12, alignSelf: 'flex-end' }}>
+              <Text style={{ color: '#007AFF', fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
-    </View>
-  );
-}
+      </Modal>
+
+     </View>
+   );
+ }
 
 const styles = StyleSheet.create({
   container: {

@@ -5,15 +5,13 @@ import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Friends from "./pages/Friends";
-
-// 🔹 NEW: chat section that will appear inside the Friends page
 import FriendsChatPage from "./pages/FriendsChatPage";
+import SettingsPage from './pages/SettingsPage';
 
 // Dashboard layout and pages
 import DashboardLayout, {
   DashboardHome,
   Reports,
-  SettingsPage,
   EmergencyContacts   // ✅ NEW IMPORT
 } from './pages/Dashboard/Dashboard';
 

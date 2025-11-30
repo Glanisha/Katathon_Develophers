@@ -1,142 +1,22 @@
-import { useState, useEffect } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  useMap,
-  useMapEvents,
-} from 'react-leaflet';
-import { Icon } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import api from '../../../api';
-import { useAuth } from '../../context/AuthContext';
+import { useState, useEffect, useRef } from "react";
+import api from "../../../api";
+import { useAuth } from "../../context/AuthContext";
 
-// Fix for default marker icons in React-Leaflet
-delete Icon.Default.prototype._getIconUrl;
-Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+import tt from "@tomtom-international/web-sdk-maps";
+import "@tomtom-international/web-sdk-maps/dist/maps.css";
 
-// Custom icons
-const currentLocationIcon = new Icon({
-  iconUrl:
-    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-const destinationIcon = new Icon({
-  iconUrl:
-    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-const friendIcon = new Icon({
-  iconUrl:
-    'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-// Component to handle map click events
-function MapClickHandler({ onMapClick }) {
-  useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng);
-    },
-  });
-  return null;
-}
-
-// Component to center map on initial user location
-function LocationMarker({ position }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (position) {
-      map.setView(position, 15);
-    }
-  }, [position, map]);
-
-  return null;
-}
-
-// Moving navigation marker that follows the route
-function NavigationMarker({ position, isNavigating }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (isNavigating && position) {
-      map.setView([position.lat, position.lng], 16);
-    }
-  }, [position, isNavigating, map]);
-
-  if (!position || !isNavigating) return null;
-
-  return (
-    <Marker
-      position={[position.lat, position.lng]}
-      icon={currentLocationIcon}
-    >
-      <Popup>You are here (navigation)</Popup>
-    </Marker>
-  );
-}
-
-// Floating "Re-center" control
-function RecenterControl({ currentLocation, navigationPosition, isNavigating }) {
-  const map = useMap();
-
-  const handleClick = () => {
-    const target = isNavigating ? navigationPosition || currentLocation : currentLocation;
-    if (!target) return;
-    map.setView([target.lat, target.lng], 16);
-  };
-
-  return (
-    <div className="leaflet-top leaflet-right">
-      <div className="leaflet-control m-2">
-        <button
-          type="button"
-          onClick={handleClick}
-          className="px-3 py-1 rounded-full bg-white shadow text-xs font-medium hover:bg-gray-100"
-        >
-          Re-center on me
-        </button>
-      </div>
-    </div>
-  );
-}
+// 🔑 TomTom API key from frontend .env
+const TOMTOM_API_KEY = import.meta.env.VITE_TOMTOM_API_KEY;
 
 // Mapillary walking experience embeds (SV Road)
 const mapillaryEmbeds = [
-  'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=523808853473226&x=0.5&y=0.5&style=photo',
-  'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1240144430506052&x=0.5&y=0.5&style=photo',
-  'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=528738053191765&x=0.49999999999337164&y=0.49999999999979505&style=photo',
-  'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1095380695299787&x=0.5&y=0.5&style=photo',
-  'https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2215276745539638&x=0.5000000000000001&y=0.5&style=photo',
-  'https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2551481258378160&x=0.4999999999999994&y=0.5&style=photo',
-  'https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=4029046383993584&x=0.5000000000000063&y=0.5&style=photo',
+  "https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=523808853473226&x=0.5&y=0.5&style=photo",
+  "https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1240144430506052&x=0.5&y=0.5&style=photo",
+  "https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=528738053191765&x=0.49999999999337164&y=0.49999999999979505&style=photo",
+  "https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=1095380695299787&x=0.5&y=0.5&style=photo",
+  "https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2215276745539638&x=0.5000000000000001&y=0.5&style=photo",
+  "https://www.mapillary.com/embed?map_style=Mapillary%20light&image_key=2551481258378160&x=0.4999999999999994&y=0.5&style=photo",
+  "https://www.mapillary.com/embed?map_style=OpenStreetMap&image_key=4029046383993584&x=0.5000000000000063&y=0.5&style=photo",
 ];
 
 // Approximate coordinates along SV Road (lat, lng)
@@ -164,16 +44,109 @@ const computeBearing = (lat1, lon1, lat2, lon2) => {
 
 const describeTurn = (delta) => {
   const abs = Math.abs(delta);
-  if (abs < 30) return 'Continue straight';
-  if (delta > 0 && abs < 135) return 'Turn right';
-  if (delta < 0 && abs < 135) return 'Turn left';
-  if (delta >= 135) return 'Make a sharp right / U-turn';
-  if (delta <= -135) return 'Make a sharp left / U-turn';
-  return 'Continue';
+  if (abs < 30) return "Continue straight";
+  if (delta > 0 && abs < 135) return "Turn right";
+  if (delta < 0 && abs < 135) return "Turn left";
+  if (delta >= 135) return "Make a sharp right / U-turn";
+  if (delta <= -135) return "Make a sharp left / U-turn";
+  return "Continue";
+};
+
+// color based on safety score
+const getRouteColor = (safetyScore) => {
+  if (safetyScore >= 80) return "#22c55e";
+  if (safetyScore >= 60) return "#eab308";
+  if (safetyScore >= 40) return "#f97316";
+  return "#ef4444";
+};
+
+// parse "lat,lng" string
+const parseLatLng = (value) => {
+  const parts = value.split(",");
+  if (parts.length !== 2) return null;
+  const lat = parseFloat(parts[0].trim());
+  const lng = parseFloat(parts[1].trim());
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  return { lat, lng };
+};
+
+// get coordinates array from backend route object (TomTom style)
+const getRouteCoordinates = (route) => {
+  if (!route || !route.legs) return [];
+  const coordinates = [];
+  route.legs.forEach((leg) => {
+    if (leg.points) {
+      leg.points.forEach((point) => {
+        coordinates.push([point.longitude, point.latitude]); // [lng, lat]
+      });
+    }
+  });
+  return coordinates;
+};
+
+// build navigation steps from route geometry
+const buildNavigationSteps = (route) => {
+  const coords = getRouteCoordinates(route).map(([lng, lat]) => [lat, lng]);
+
+  if (!coords || coords.length < 3) {
+    return [
+      "Start from your location and follow the highlighted route.",
+      "You are almost near your destination.",
+    ];
+  }
+
+  const steps = [];
+  steps.push("Start from your location.");
+
+  const sampleCount = 15;
+  const stepSize = Math.max(2, Math.floor(coords.length / sampleCount));
+  const sampled = [];
+  for (let i = 0; i < coords.length; i += stepSize) {
+    sampled.push(coords[i]);
+  }
+  if (sampled[sampled.length - 1] !== coords[coords.length - 1]) {
+    sampled.push(coords[coords.length - 1]);
+  }
+
+  for (let i = 1; i < sampled.length - 1; i++) {
+    const [lat1, lng1] = sampled[i - 1];
+    const [lat2, lng2] = sampled[i];
+    const [lat3, lng3] = sampled[i + 1];
+
+    const b1 = computeBearing(lat1, lng1, lat2, lng2);
+    const b2 = computeBearing(lat2, lng2, lat3, lng3);
+
+    let delta = b2 - b1;
+    delta = ((delta + 540) % 360) - 180;
+
+    const turnText = describeTurn(delta);
+    if (turnText === "Continue straight") {
+      steps.push("Continue straight on this road.");
+    } else if (turnText.startsWith("Turn left")) {
+      steps.push("Turn left at the upcoming intersection.");
+    } else if (turnText.startsWith("Turn right")) {
+      steps.push("Turn right at the upcoming intersection.");
+    } else {
+      steps.push("Adjust direction as needed to stay on the route.");
+    }
+  }
+
+  steps.push("You have reached near your destination.");
+  return steps;
 };
 
 const Map = () => {
   const { user } = useAuth();
+
+  const mapElementRef = useRef(null);
+  const mapRef = useRef(null);
+
+  // marker + layer refs
+  const currentMarkerRef = useRef(null);
+  const destMarkerRef = useRef(null);
+  const friendMarkersRef = useRef([]);
+  const navMarkerRef = useRef(null);
+  const routeLayersRef = useRef([]); // {id, sourceId}
 
   const [friendsAroundMe, setFriendsAroundMe] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -182,44 +155,67 @@ const Map = () => {
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [nearbyFriends, setNearbyFriends] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [routePreference, setRoutePreference] = useState('safest');
+  const [error, setError] = useState("");
+  const [routePreference, setRoutePreference] = useState("safest");
 
-  // manual location input
-  const [manualLocationInput, setManualLocationInput] = useState('');
+  const [manualLocationInput, setManualLocationInput] = useState("");
 
-  // navigation + walking experience state
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigationSteps, setNavigationSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-
-  // navigation path + moving marker position
   const [navigationPath, setNavigationPath] = useState([]); // [{lat,lng}]
   const [navigationPosition, setNavigationPosition] = useState(null);
 
   const [showWalkingExperience, setShowWalkingExperience] = useState(false);
   const [currentMapillaryIndex, setCurrentMapillaryIndex] = useState(0);
 
-  // Get user's current location
+  // get user location
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const coords = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          };
-          setCurrentLocation(coords);
-        },
-        (err) => {
-          console.error('Geolocation error:', err);
-          setError('Unable to get your location');
-          // fallback
-          setCurrentLocation({ lat: 37.7749, lng: -122.4194 });
-        }
-      );
-    }
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coords = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setCurrentLocation(coords);
+      },
+      (err) => {
+        console.error("Geolocation error:", err);
+        setError("Unable to get your location");
+        // fallback
+        setCurrentLocation({ lat: 19.076, lng: 72.8777 });
+      }
+    );
   }, []);
+
+  // init TomTom map once we have location
+  useEffect(() => {
+    if (!currentLocation || !TOMTOM_API_KEY) return;
+    if (mapRef.current) return;
+
+    mapRef.current = tt.map({
+      key: TOMTOM_API_KEY,
+      container: mapElementRef.current,
+      center: [currentLocation.lng, currentLocation.lat],
+      zoom: 15,
+    });
+
+    // click handler to set destination
+    mapRef.current.on("click", (e) => {
+      const { lat, lng } = e.lngLat;
+      handleMapClick({ lat, lng });
+    });
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLocation]);
 
   // keep backend updated with my live location & fetch friends around me
   useEffect(() => {
@@ -227,24 +223,24 @@ const Map = () => {
 
     const updateLocationAndFetchFriends = async () => {
       try {
-        await api.post('/map/update-location', {
+        await api.post("/map/update-location", {
           coordinates: {
             lat: currentLocation.lat,
             lng: currentLocation.lng,
           },
         });
 
-        const res = await api.post('/map/nearby-friends', {
+        const res = await api.post("/map/nearby-friends", {
           coordinates: {
             lat: currentLocation.lat,
             lng: currentLocation.lng,
           },
-          radius: 3000, // 3 km
+          radius: 3000,
         });
 
         setFriendsAroundMe(res.data.friends || []);
       } catch (err) {
-        console.error('Friend location error:', err);
+        console.error("Friend location error:", err);
       }
     };
 
@@ -253,7 +249,208 @@ const Map = () => {
     return () => clearInterval(interval);
   }, [user, currentLocation]);
 
-  // Handle map click for destination
+  // update current location marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !currentLocation) return;
+
+    if (!currentMarkerRef.current) {
+      currentMarkerRef.current = new tt.Marker({ color: "#2563eb" })
+        .setLngLat([currentLocation.lng, currentLocation.lat])
+        .setPopup(new tt.Popup().setHTML("<b>Your Location</b>"))
+        .addTo(map);
+    } else {
+      currentMarkerRef.current.setLngLat([
+        currentLocation.lng,
+        currentLocation.lat,
+      ]);
+    }
+  }, [currentLocation]);
+
+  // update destination marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!destination) {
+      if (destMarkerRef.current) {
+        destMarkerRef.current.remove();
+        destMarkerRef.current = null;
+      }
+      return;
+    }
+
+    if (!destMarkerRef.current) {
+      destMarkerRef.current = new tt.Marker({ color: "#dc2626" })
+        .setLngLat([destination.lng, destination.lat])
+        .setPopup(new tt.Popup().setHTML("<b>Destination</b>"))
+        .addTo(map);
+    } else {
+      destMarkerRef.current.setLngLat([destination.lng, destination.lat]);
+    }
+  }, [destination]);
+
+  // friends markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // clear old markers
+    friendMarkersRef.current.forEach((m) => m.remove());
+    friendMarkersRef.current = [];
+
+    friendsAroundMe.forEach((friend) => {
+      if (typeof friend.lat === "number" && typeof friend.lng === "number") {
+        const marker = new tt.Marker({ color: "#16a34a" })
+          .setLngLat([friend.lng, friend.lat])
+          .setPopup(
+            new tt.Popup().setHTML(
+              `<b>${friend.displayName || friend.name}</b><br/>Nearby friend`
+            )
+          )
+          .addTo(map);
+        friendMarkersRef.current.push(marker);
+      }
+    });
+  }, [friendsAroundMe]);
+
+  // navigation moving marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!isNavigating || !navigationPosition) {
+      if (navMarkerRef.current) {
+        navMarkerRef.current.remove();
+        navMarkerRef.current = null;
+      }
+      return;
+    }
+
+    if (!navMarkerRef.current) {
+      navMarkerRef.current = new tt.Marker({ color: "#0ea5e9" })
+        .setLngLat([navigationPosition.lng, navigationPosition.lat])
+        .setPopup(new tt.Popup().setHTML("<b>You are here (navigation)</b>"))
+        .addTo(map);
+    } else {
+      navMarkerRef.current.setLngLat([
+        navigationPosition.lng,
+        navigationPosition.lat,
+      ]);
+    }
+
+    map.setCenter([navigationPosition.lng, navigationPosition.lat]);
+    map.setZoom(16);
+  }, [navigationPosition, isNavigating]);
+
+  // draw routes as layers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // remove old layers & sources
+    routeLayersRef.current.forEach(({ id, sourceId }) => {
+      if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+    });
+    routeLayersRef.current = [];
+
+    routes.forEach((route, index) => {
+      const coords = getRouteCoordinates(route);
+      if (!coords.length) return;
+
+      const isSelected = selectedRoute === index;
+      const isActiveNav = isSelected && isNavigating;
+
+      const baseColor = getRouteColor(route.safetyScore);
+      const inactiveColor = "#94a3b8";
+
+      const color =
+        isActiveNav || (!isNavigating && isSelected) ? baseColor : inactiveColor;
+
+      const width = isActiveNav ? 8 : isSelected ? 6 : 3;
+      const opacity = isActiveNav ? 1 : isSelected ? 0.9 : 0.4;
+
+      const sourceId = `route-source-${index}`;
+      const layerId = `route-layer-${index}`;
+
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: coords,
+          },
+        },
+      });
+
+      map.addLayer({
+        id: layerId,
+        type: "line",
+        source: sourceId,
+        paint: {
+          "line-color": color,
+          "line-width": width,
+          "line-opacity": opacity,
+          "line-dasharray":
+            isActiveNav || isSelected ? [1, 0] : [3, 3],
+        },
+      });
+
+      // click on route to select
+      map.on("click", layerId, () => {
+        setSelectedRoute(index);
+      });
+
+      routeLayersRef.current.push({ id: layerId, sourceId });
+    });
+  }, [routes, selectedRoute, isNavigating]);
+
+  // SV Road polyline when walking experience enabled
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const layerId = "sv-road-layer";
+    const sourceId = "sv-road-source";
+
+    if (!showWalkingExperience) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      return;
+    }
+
+    const coords = svRoadCoordinates.map((p) => [p.lng, p.lat]);
+
+    map.addSource(sourceId, {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: coords,
+        },
+      },
+    });
+
+    map.addLayer({
+      id: layerId,
+      type: "line",
+      source: sourceId,
+      paint: {
+        "line-color": "#a855f7",
+        "line-width": 4,
+        "line-opacity": 0.9,
+      },
+    });
+
+    return () => {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+    };
+  }, [showWalkingExperience]);
+
   const handleMapClick = (latlng) => {
     setDestination({ lat: latlng.lat, lng: latlng.lng });
     setRoutes([]);
@@ -266,7 +463,7 @@ const Map = () => {
     setNavigationPosition(null);
   };
 
-  // Calculate routes when destination or preference changes
+  // calculate routes when destination or preference changes
   useEffect(() => {
     if (currentLocation && destination) {
       calculateRoutes();
@@ -276,7 +473,7 @@ const Map = () => {
 
   const calculateRoutes = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     setIsNavigating(false);
     setNavigationSteps([]);
     setCurrentStepIndex(0);
@@ -286,26 +483,28 @@ const Map = () => {
     try {
       if (
         !currentLocation ||
-        typeof currentLocation.lat !== 'number' ||
-        typeof currentLocation.lng !== 'number'
+        typeof currentLocation.lat !== "number" ||
+        typeof currentLocation.lng !== "number"
       ) {
         setError(
-          'Invalid origin coordinates. Please allow location access or set your location manually.'
+          "Invalid origin coordinates. Please allow location access or set your location manually."
         );
         setLoading(false);
         return;
       }
       if (
         !destination ||
-        typeof destination.lat !== 'number' ||
-        typeof destination.lng !== 'number'
+        typeof destination.lat !== "number" ||
+        typeof destination.lng !== "number"
       ) {
-        setError('Invalid destination coordinates. Please click on the map to set a destination.');
+        setError(
+          "Invalid destination coordinates. Please click on the map to set a destination."
+        );
         setLoading(false);
         return;
       }
 
-      const response = await api.post('/map/calculate-route', {
+      const response = await api.post("/map/calculate-route", {
         origin: currentLocation,
         destination: destination,
         preferences: { routeType: routePreference },
@@ -317,7 +516,7 @@ const Map = () => {
         setSelectedRoute(0);
       }
 
-      const friendsResponse = await api.post('/map/nearby-friends', {
+      const friendsResponse = await api.post("/map/nearby-friends", {
         coordinates: {
           lat: destination.lat,
           lng: destination.lng,
@@ -327,104 +526,22 @@ const Map = () => {
 
       setNearbyFriends(friendsResponse.data.friends || []);
     } catch (err) {
-      console.error('Route calculation error:', err);
-      setError(err.response?.data?.error || 'Failed to calculate route');
+      console.error("Route calculation error:", err);
+      setError(err.response?.data?.error || "Failed to calculate route");
     } finally {
       setLoading(false);
     }
   };
 
-  // Get route polyline coordinates
-  const getRouteCoordinates = (route) => {
-    if (!route || !route.legs) return [];
-    const coordinates = [];
-    route.legs.forEach((leg) => {
-      if (leg.points) {
-        leg.points.forEach((point) => {
-          coordinates.push([point.latitude, point.longitude]);
-        });
-      }
-    });
-    return coordinates;
-  };
-
-  // Build navigation steps from route geometry
-  const buildNavigationSteps = (route) => {
-    const coords = getRouteCoordinates(route);
-    if (!coords || coords.length < 3) {
-      return [
-        'Start from your location and follow the highlighted route.',
-        'You are almost near your destination.',
-      ];
-    }
-
-    const steps = [];
-    steps.push('Start from your location.');
-
-    // sample points to avoid too many instructions
-    const sampleCount = 15;
-    const stepSize = Math.max(2, Math.floor(coords.length / sampleCount));
-    const sampled = [];
-    for (let i = 0; i < coords.length; i += stepSize) {
-      sampled.push(coords[i]);
-    }
-    if (sampled[sampled.length - 1] !== coords[coords.length - 1]) {
-      sampled.push(coords[coords.length - 1]);
-    }
-
-    for (let i = 1; i < sampled.length - 1; i++) {
-      const [lat1, lng1] = sampled[i - 1];
-      const [lat2, lng2] = sampled[i];
-      const [lat3, lng3] = sampled[i + 1];
-
-      const b1 = computeBearing(lat1, lng1, lat2, lng2);
-      const b2 = computeBearing(lat2, lng2, lat3, lng3);
-
-      let delta = b2 - b1;
-      delta = ((delta + 540) % 360) - 180;
-
-      const turnText = describeTurn(delta);
-      if (turnText === 'Continue straight') {
-        steps.push('Continue straight on this road.');
-      } else if (turnText.startsWith('Turn left')) {
-        steps.push('Turn left at the upcoming intersection.');
-      } else if (turnText.startsWith('Turn right')) {
-        steps.push('Turn right at the upcoming intersection.');
-      } else {
-        steps.push('Adjust direction as needed to stay on the route.');
-      }
-    }
-
-    steps.push('You have reached near your destination.');
-    return steps;
-  };
-
-  // color based on safety score
-  const getRouteColor = (safetyScore) => {
-    if (safetyScore >= 80) return '#22c55e';
-    if (safetyScore >= 60) return '#eab308';
-    if (safetyScore >= 40) return '#f97316';
-    return '#ef4444';
-  };
-
-  // parse "lat,lng" string
-  const parseLatLng = (value) => {
-    const parts = value.split(',');
-    if (parts.length !== 2) return null;
-    const lat = parseFloat(parts[0].trim());
-    const lng = parseFloat(parts[1].trim());
-    if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-    return { lat, lng };
-  };
-
-  // handle manual current location set
   const handleSetManualLocation = () => {
-    setError('');
+    setError("");
     if (!manualLocationInput.trim()) return;
 
     const parsed = parseLatLng(manualLocationInput);
     if (!parsed) {
-      setError('Invalid manual location. Use format: lat,lng (e.g., 19.0760, 72.8777)');
+      setError(
+        "Invalid manual location. Use format: lat,lng (e.g., 19.0760, 72.8777)"
+      );
       return;
     }
 
@@ -437,9 +554,13 @@ const Map = () => {
     setCurrentStepIndex(0);
     setNavigationPath([]);
     setNavigationPosition(null);
+
+    if (mapRef.current) {
+      mapRef.current.setCenter([parsed.lng, parsed.lat]);
+      mapRef.current.setZoom(15);
+    }
   };
 
-  // navigation handlers
   const handleStartNavigation = () => {
     if (selectedRoute === null || !routes[selectedRoute]) return;
     const route = routes[selectedRoute];
@@ -448,31 +569,34 @@ const Map = () => {
     setNavigationSteps(steps);
     setCurrentStepIndex(0);
 
-    let coords = getRouteCoordinates(route);
-    if (!coords || coords.length === 0) return;
+    const coords = getRouteCoordinates(route).map(([lng, lat]) => ({
+      lat,
+      lng,
+    }));
+    if (!coords.length) return;
 
-    // simple densify for smoother animation
+    // densify path a bit
+    let dense = [];
     if (coords.length < 80) {
-      const dense = [];
       for (let i = 0; i < coords.length - 1; i++) {
-        const [lat1, lng1] = coords[i];
-        const [lat2, lng2] = coords[i + 1];
-        const segments = 3; // add 2 midpoints
+        const p1 = coords[i];
+        const p2 = coords[i + 1];
+        const segments = 3;
         for (let s = 0; s < segments; s++) {
           const t = s / segments;
-          dense.push([
-            lat1 + (lat2 - lat1) * t,
-            lng1 + (lng2 - lng1) * t,
-          ]);
+          dense.push({
+            lat: p1.lat + (p2.lat - p1.lat) * t,
+            lng: p1.lng + (p2.lng - p1.lng) * t,
+          });
         }
       }
       dense.push(coords[coords.length - 1]);
-      coords = dense;
+    } else {
+      dense = coords;
     }
 
-    const path = coords.map(([lat, lng]) => ({ lat, lng }));
-    setNavigationPath(path);
-    setNavigationPosition(path[0]);
+    setNavigationPath(dense);
+    setNavigationPosition(dense[0]);
     setIsNavigating(true);
   };
 
@@ -494,7 +618,6 @@ const Map = () => {
     setCurrentStepIndex((prev) => (prev > 0 ? prev - 1 : prev));
   };
 
-  // walking experience handlers
   const handleViewWalkingExperience = () => {
     setShowWalkingExperience(true);
     setCurrentMapillaryIndex(0);
@@ -514,39 +637,26 @@ const Map = () => {
     setCurrentMapillaryIndex((prev) => (prev > 0 ? prev - 1 : prev));
   };
 
-  // Simulate user moving along the navigation path
-  useEffect(() => {
-    if (!isNavigating || navigationPath.length === 0) return;
+  const handleRecenter = () => {
+    if (!mapRef.current || !currentLocation) return;
+    const target =
+      isNavigating && navigationPosition
+        ? navigationPosition
+        : currentLocation;
+    mapRef.current.setCenter([target.lng, target.lat]);
+    mapRef.current.setZoom(16);
+  };
 
-    let index = 0;
-    const totalPoints = navigationPath.length;
-
-    setNavigationPosition(navigationPath[0]);
-
-    const intervalId = setInterval(() => {
-      index += 1;
-      if (index >= totalPoints) {
-        setNavigationPosition(navigationPath[totalPoints - 1]);
-        clearInterval(intervalId);
-        setIsNavigating(false);
-        return;
-      }
-
-      setNavigationPosition(navigationPath[index]);
-
-      // auto-update step index according to progress
-      if (navigationSteps.length > 0) {
-        const progress = index / (totalPoints - 1);
-        const newStepIndex = Math.min(
-          navigationSteps.length - 1,
-          Math.floor(progress * navigationSteps.length)
-        );
-        setCurrentStepIndex(newStepIndex);
-      }
-    }, 400); // 0.4s
-
-    return () => clearInterval(intervalId);
-  }, [isNavigating, navigationPath, navigationSteps.length]);
+  if (!TOMTOM_API_KEY) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-screen">
+        <div className="text-lg text-red-600">
+          TomTom API key is not configured. Please set{" "}
+          <code>VITE_TOMTOM_API_KEY</code> in your frontend .env file.
+        </div>
+      </div>
+    );
+  }
 
   if (!currentLocation) {
     return (
@@ -557,7 +667,6 @@ const Map = () => {
   }
 
   return (
-    // page-wide scroll
     <div className="flex flex-col min-h-screen overflow-y-auto bg-gray-50">
       {/* Controls */}
       <div className="bg-white p-4 md:p-6 shadow-md z-10 relative">
@@ -597,8 +706,8 @@ const Map = () => {
           )}
 
           <div className="flex-1 text-xs md:text-sm text-gray-600">
-            {!destination && 'Click on the map to set your destination'}
-            {loading && 'Calculating routes...'}
+            {!destination && "Click on the map to set your destination"}
+            {loading && "Calculating routes..."}
             {error && <span className="text-red-500 ml-2">{error}</span>}
           </div>
         </div>
@@ -624,7 +733,8 @@ const Map = () => {
             Update Location
           </button>
           <span className="text-xs text-gray-500">
-            Current: {currentLocation.lat.toFixed(4)}, {currentLocation.lng.toFixed(4)}
+            Current: {currentLocation.lat.toFixed(4)},{" "}
+            {currentLocation.lng.toFixed(4)}
           </span>
         </div>
 
@@ -637,8 +747,8 @@ const Map = () => {
             <div
               className="max-h-64 overflow-y-auto pr-2"
               style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#cbd5e1 #f1f5f9',
+                scrollbarWidth: "thin",
+                scrollbarColor: "#cbd5e1 #f1f5f9",
               }}
             >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -652,18 +762,22 @@ const Map = () => {
                       onClick={() => setSelectedRoute(index)}
                       className={`p-3 border-2 rounded cursor-pointer transition-all text-sm ${
                         isActiveNav
-                          ? 'border-green-500 bg-green-50 shadow-md'
+                          ? "border-green-500 bg-green-50 shadow-md"
                           : isSelected
-                          ? 'border-blue-500 bg-blue-50 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                          ? "border-blue-500 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-gray-300 bg-white"
                       }`}
                     >
                       <div className="flex justify-between items-center mb-1">
-                        <span className="font-medium">Route {index + 1}</span>
+                        <span className="font-medium">
+                          Route {index + 1}
+                        </span>
                         <span
                           className="px-2 py-1 rounded text-xs font-medium text-white"
                           style={{
-                            backgroundColor: getRouteColor(route.safetyScore),
+                            backgroundColor: getRouteColor(
+                              route.safetyScore
+                            ),
                           }}
                         >
                           Safety: {Math.round(route.safetyScore)}
@@ -671,12 +785,15 @@ const Map = () => {
                       </div>
                       <div className="text-xs text-gray-600 space-y-0.5">
                         <div>
-                          Distance:{' '}
+                          Distance:{" "}
                           {(route.lengthInMeters / 1000).toFixed(2)} km
                         </div>
                         <div>
-                          Time:{' '}
-                          {Math.round(route.travelTimeInSeconds / 60)} min
+                          Time:{" "}
+                          {Math.round(
+                            route.travelTimeInSeconds / 60
+                          )}{" "}
+                          min
                         </div>
                       </div>
                       {isActiveNav && (
@@ -723,7 +840,8 @@ const Map = () => {
               <div className="mt-3 p-3 border rounded bg-blue-50 text-sm">
                 <div className="font-semibold mb-1">Navigation</div>
                 <div className="mb-2">
-                  {navigationSteps[currentStepIndex] || navigationSteps[0]}
+                  {navigationSteps[currentStepIndex] ||
+                    navigationSteps[0]}
                 </div>
                 <div className="flex justify-between items-center text-xs text-gray-600">
                   <button
@@ -734,11 +852,14 @@ const Map = () => {
                     ◀ Previous
                   </button>
                   <span>
-                    Step {currentStepIndex + 1} of {navigationSteps.length}
+                    Step {currentStepIndex + 1} of{" "}
+                    {navigationSteps.length}
                   </span>
                   <button
                     onClick={handleNextStep}
-                    disabled={currentStepIndex === navigationSteps.length - 1}
+                    disabled={
+                      currentStepIndex === navigationSteps.length - 1
+                    }
                     className="px-2 py-1 rounded border disabled:opacity-50"
                   >
                     Next ▶
@@ -768,9 +889,7 @@ const Map = () => {
                       className="w-8 h-8 rounded-full"
                     />
                   )}
-                  <span>
-                    {friend.displayName || friend.name}
-                  </span>
+                  <span>{friend.displayName || friend.name}</span>
                   <button className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
                     Invite
                   </button>
@@ -781,138 +900,28 @@ const Map = () => {
         )}
       </div>
 
-      {/* Map */}
+      {/* Map container */}
       <div
         className={`relative ${
-          showWalkingExperience ? 'pointer-events-none opacity-50' : ''
+          showWalkingExperience ? "pointer-events-none opacity-50" : ""
         }`}
-        style={{ height: '70vh' }}
+        style={{ height: "70vh" }}
       >
-        <MapContainer
-          center={[currentLocation.lat, currentLocation.lng]}
-          zoom={15}
-          style={{ height: '100%', width: '100%' }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+        <div
+          ref={mapElementRef}
+          style={{ height: "100%", width: "100%" }}
+        />
 
-          <MapClickHandler onMapClick={handleMapClick} />
-          <LocationMarker position={currentLocation} />
-
-          {/* Current Location Marker */}
-          {currentLocation && (
-            <Marker
-              position={[currentLocation.lat, currentLocation.lng]}
-              icon={currentLocationIcon}
-            >
-              <Popup>Your Location</Popup>
-            </Marker>
-          )}
-
-          {/* Friends Around Me Markers */}
-          {friendsAroundMe.map((friend) =>
-            typeof friend.lat === 'number' &&
-            typeof friend.lng === 'number' ? (
-              <Marker
-                key={friend.id}
-                position={[friend.lat, friend.lng]}
-                icon={friendIcon}
-              >
-                <Popup>
-                  <strong>{friend.displayName || friend.name}</strong>
-                  <br />
-                  Nearby friend
-                </Popup>
-              </Marker>
-            ) : null
-          )}
-
-          {/* Destination Marker */}
-          {destination && (
-            <Marker
-              position={[destination.lat, destination.lng]}
-              icon={destinationIcon}
-            >
-              <Popup>Destination</Popup>
-            </Marker>
-          )}
-
-          {/* Route Polylines with highlighting logic */}
-          {routes.map((route, index) => {
-            const coordinates = getRouteCoordinates(route);
-            if (coordinates.length === 0) return null;
-
-            const isSelected = selectedRoute === index;
-            const isActiveNav = isSelected && isNavigating;
-
-            const baseColor = getRouteColor(route.safetyScore);
-            const inactiveColor = '#94a3b8'; // grey
-
-            // if navigating: only active route in color, rest grey
-            // if not navigating: selected route in color, rest grey
-            const color =
-              isActiveNav || (!isNavigating && isSelected)
-                ? baseColor
-                : inactiveColor;
-
-            const weight = isActiveNav
-              ? 8
-              : isSelected
-              ? 6
-              : 3;
-
-            const opacity = isActiveNav
-              ? 1
-              : isSelected
-              ? 0.9
-              : 0.4;
-
-            const dashArray =
-              isActiveNav || isSelected ? 'none' : '6, 8';
-
-            return (
-              <Polyline
-                key={index}
-                positions={coordinates}
-                color={color}
-                weight={weight}
-                opacity={opacity}
-                dashArray={dashArray}
-                lineCap="round"
-                lineJoin="round"
-                className="cursor-pointer"
-                eventHandlers={{
-                  click: () => setSelectedRoute(index),
-                }}
-              />
-            );
-          })}
-
-          {/* SV Road Polyline during walking experience */}
-          {showWalkingExperience && (
-            <Polyline
-              positions={svRoadCoordinates.map((p) => [p.lat, p.lng])}
-              color="purple"
-              weight={4}
-              opacity={0.9}
-            />
-          )}
-
-          {/* Moving navigation marker */}
-          <NavigationMarker
-            position={navigationPosition}
-            isNavigating={isNavigating}
-          />
-
-          {/* Re-center button */}
-          <RecenterControl
-            currentLocation={currentLocation}
-            navigationPosition={navigationPosition}
-            isNavigating={isNavigating}
-          />
-        </MapContainer>
+        {/* Recenter button */}
+        <div className="absolute top-4 right-4 z-10">
+          <button
+            type="button"
+            onClick={handleRecenter}
+            className="px-3 py-1 rounded-full bg-white shadow text-xs font-medium hover:bg-gray-100"
+          >
+            Re-center on me
+          </button>
+        </div>
       </div>
 
       {/* Mapillary Walking Experience Overlay */}
@@ -920,9 +929,7 @@ const Map = () => {
         <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center">
           <div className="bg-white w-11/12 md:w-3/4 h-[90vh] rounded-lg shadow-lg flex flex-col">
             <div className="flex items-center justify-between px-4 py-2 border-b">
-              <h3 className="font-semibold text-lg">
-                Walking Experience
-              </h3>
+              <h3 className="font-semibold text-lg">Walking Experience</h3>
               <button
                 onClick={handleExitWalkingExperience}
                 className="text-sm px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
@@ -954,7 +961,9 @@ const Map = () => {
               </span>
               <button
                 onClick={handleNextMapillary}
-                disabled={currentMapillaryIndex === mapillaryEmbeds.length - 1}
+                disabled={
+                  currentMapillaryIndex === mapillaryEmbeds.length - 1
+                }
                 className="px-3 py-1 rounded border disabled:opacity-50"
               >
                 Next ▶

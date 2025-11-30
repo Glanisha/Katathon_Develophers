@@ -8,16 +8,13 @@ const cors = require('cors');
 const authRoutes = require('./routes/AuthRoutes');
 const mapRoutes = require('./routes/MapRoutes');
 const emergencyContactRoutes = require('./routes/emergencyContacts');
-const alertRoutes = require('./routes/AlertRoute');   // ⭐ Add this
+const alertRoutes = require('./routes/AlertRoute');   
 const FriendsRoutes = require("./routes/FriendsRoutes");
 const LocationRoutes = require("./routes/LocationRoutes");
 const ReportsRoutes = require("./routes/ReportsRoutes");
 const markerRoutes = require('./routes/MarkerRoutes');
 const chatRoutes = require('./routes/chatRoutes');
-
-
-
-
+const settingsRoutes = require('./routes/SettingsRoutes');
 
 
 
@@ -47,6 +44,8 @@ app.use("/api/location", LocationRoutes);
 app.use('/api/chats', chatRoutes);
 // reports
 app.use('/api/reports', ReportsRoutes);
+app.use('/api/settings', settingsRoutes);
+
 
 
 // Start the server

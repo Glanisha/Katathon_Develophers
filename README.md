@@ -2,7 +2,7 @@
 
 # SafeWalk – Route Safety Companion
 
-Katathon project developed with TomTom APIs and supporting ecosystem services.
+Katathon project developed with TomTom APIs and supporting ecosystem services. (GGs we won!)
 
 ---
 

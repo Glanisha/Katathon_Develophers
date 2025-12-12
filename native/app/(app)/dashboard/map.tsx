@@ -892,7 +892,7 @@ const MapScreen = () => {
                 {route.predictiveSafety && (
                   <View style={{ marginTop: 8, padding: 8, backgroundColor: '#fff', borderRadius: 6 }}>
                     <Text style={{ fontWeight: '700' }}>Predictive Safety</Text>
-                    <Text>Now: {route.predictiveSafety.now}/100</Text>
+                    {/* <Text>Now: {route.predictiveSafety.now}/100</Text> */}
                     <Text>In 30 min: {route.predictiveSafety.in30Min}/100</Text>
                     <Text>After 22:00: {route.predictiveSafety.after22}/100</Text>
                     {route.predictiveSafety.explanation && (

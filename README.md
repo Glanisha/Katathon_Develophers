@@ -14,13 +14,13 @@ SafeWalk is a pedestrian-first navigation platform that prioritizes user safety 
 
 <p align="center">
   
-  <img src="readme/dashboard.jpg" width="120" />
-  <img src="readme/routes.jpg" width="120" />
-  <img src="readme/incident.jpg" width="120" />
-  <img src="readme/report.jpg" width="120" />
-   <img src="readme/friends.jpg" width="120" />
-  <img src="readme/sos.jpg" width="120" />
-  <img src="readme/agent.jpg" width="120" />
+  <img src="readme/dashboard.jpg" width="100" />
+  <img src="readme/routes.jpg"  width="100" />
+  <img src="readme/incident.jpg"  width="100" />
+  <img src="readme/report.jpg" width="100"/>
+   <img src="readme/friends.jpg"  width="100" />
+  <img src="readme/sos.jpg"  width="100"/>
+  <img src="readme/agent.jpg"  width="100" />
 </p>
 
 ---
